@@ -49,11 +49,22 @@
 
     <header class="mb-6">
       <h1 class="text-2xl sm:text-3xl font-bold text-white">🎬 Histori Film</h1>
-      <p class="text-slate-400 text-sm mt-1">Catat tontonanmu. Data tersimpan di Supabase dan diurutkan otomatis berdasarkan kode film.</p>
+      <p class="text-slate-400 text-sm mt-1">Catat tontonanmu dan daftar film yang belum ditonton. Data tersimpan di Supabase dan diurutkan otomatis berdasarkan kode film.</p>
     </header>
 
     <!-- BANNER ERROR DATABASE -->
     <div id="dbBanner" class="hidden mb-6 rounded-lg border border-rose-500/40 bg-rose-500/10 text-rose-200 text-sm px-3 py-2" role="alert"></div>
+
+    <!-- BANNER SETUP TABEL WATCHLIST -->
+    <div id="watchSetupBanner" class="hidden mb-6 rounded-lg border border-amber-500/40 bg-amber-500/10 text-amber-100 text-sm px-3 py-3">
+      <p class="font-medium">Tabel <code class="bg-slate-900/70 px-1.5 py-0.5 rounded">watchlist</code> belum ada di Supabase.</p>
+      <p class="text-amber-200/80 mt-1 mb-2">Buka Supabase, menu SQL Editor, jalankan SQL ini sekali, lalu muat ulang halaman. Bagian "Belum Ditonton" aktif setelah itu.</p>
+      <pre id="watchSql" class="overflow-x-auto rounded-lg bg-slate-950/70 border border-slate-700 p-3 text-xs text-slate-200 whitespace-pre"></pre>
+      <button type="button" id="copySql"
+              class="mt-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-sm font-medium px-3 py-1.5 transition">
+        Salin SQL
+      </button>
+    </div>
 
     <!-- BANNER MIGRASI DATA LOKAL -->
     <div id="migrateBanner" class="hidden mb-6 rounded-lg border border-sky-500/40 bg-sky-500/10 text-sky-200 text-sm px-3 py-2">
@@ -62,6 +73,20 @@
         <button type="button" id="migrateBtn"
                 class="rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-sm font-medium px-3 py-1.5 transition">
           Unggah ke Supabase
+        </button>
+      </div>
+    </div>
+
+    <!-- TAB: SUDAH / BELUM DITONTON -->
+    <div class="mb-5" role="tablist" aria-label="Daftar film">
+      <div class="inline-flex w-full sm:w-auto gap-1 rounded-xl border border-slate-800 bg-slate-900/80 p-1">
+        <button type="button" role="tab" id="tabWatched" data-view="watched"
+                class="flex-1 sm:flex-none inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition">
+          Sudah Ditonton <span id="countWatched" class="ml-1.5 rounded-full bg-black/25 px-1.5 py-0.5 text-xs empty:hidden"></span>
+        </button>
+        <button type="button" role="tab" id="tabWatchlist" data-view="watchlist"
+                class="flex-1 sm:flex-none inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition">
+          Belum Ditonton <span id="countWatchlist" class="ml-1.5 rounded-full bg-black/25 px-1.5 py-0.5 text-xs empty:hidden"></span>
         </button>
       </div>
     </div>
@@ -91,7 +116,7 @@
       </div>
 
       <div id="editBanner" class="hidden mb-5 rounded-lg border border-amber-500/40 bg-amber-500/10 text-amber-200 text-sm px-3 py-2">
-        ✏️ Mode edit: <span id="editBannerCode" class="font-mono font-semibold"></span>
+        <span id="editBannerText">✏️ Mode edit:</span> <span id="editBannerCode" class="font-mono font-semibold"></span>
       </div>
 
       <form id="movieForm" novalidate class="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -110,8 +135,8 @@
           <div id="categoryGroup" class="grid grid-cols-2 gap-2"></div>
         </fieldset>
 
-        <!-- Rating -->
-        <div>
+        <!-- Rating (hanya untuk Sudah Ditonton) -->
+        <div id="ratingBlock">
           <label for="rating" class="block text-sm font-medium text-slate-300 mb-1">Rating Pribadi</label>
           <div class="flex items-center gap-3">
             <input id="rating" type="range" min="1" max="5" step="0.5" value="3" class="flex-1" />
@@ -136,7 +161,7 @@
         </div>
 
         <!-- Artis -->
-        <div>
+        <div id="artistBlock">
           <label for="artistInput" class="block text-sm font-medium text-slate-300 mb-1">
             Artis (Pemain) <span id="artistCount" class="text-slate-500 font-normal">0/12</span>
           </label>
@@ -171,12 +196,12 @@
     <!-- OUTPUT -->
     <section>
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-        <h2 class="text-xl font-semibold text-white">Daftar Film <span id="summary" class="text-sm font-normal text-slate-400"></span></h2>
+        <h2 class="text-xl font-semibold text-white"><span id="listTitle">Sudah Ditonton</span> <span id="summary" class="text-sm font-normal text-slate-400"></span></h2>
         <input id="search" type="search" placeholder="Cari kode, artis, atau kategori…"
                class="w-full sm:w-72 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 placeholder-slate-500 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400" />
       </div>
       <div id="output" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
-      <p id="emptyState" class="hidden text-center text-slate-500 py-12">Belum ada data. Tambahkan film pertamamu atau gunakan Impor Catatan.</p>
+      <p id="emptyState" class="hidden text-center text-slate-500 py-12"></p>
     </section>
   </div>
 
@@ -192,13 +217,27 @@
         <button type="button" id="closeImport" class="text-slate-400 hover:text-white text-2xl leading-none" aria-label="Tutup">&times;</button>
       </div>
 
+      <fieldset class="mb-3">
+        <legend class="text-xs font-medium text-slate-400 mb-1">Simpan ke</legend>
+        <div class="grid grid-cols-2 gap-2">
+          <label class="relative cursor-pointer select-none">
+            <input type="radio" name="importTarget" value="watched" class="peer sr-only" checked />
+            <span class="block text-center rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-400 transition hover:border-slate-500 peer-checked:bg-indigo-500/15 peer-checked:border-indigo-400 peer-checked:text-indigo-200 peer-focus-visible:ring-2 peer-focus-visible:ring-indigo-400">Sudah Ditonton</span>
+          </label>
+          <label class="relative cursor-pointer select-none">
+            <input type="radio" name="importTarget" value="watchlist" class="peer sr-only" />
+            <span class="block text-center rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-400 transition hover:border-slate-500 peer-checked:bg-teal-500/15 peer-checked:border-teal-400 peer-checked:text-teal-200 peer-focus-visible:ring-2 peer-focus-visible:ring-teal-400">Belum Ditonton</span>
+          </label>
+        </div>
+      </fieldset>
+
       <textarea id="importText" rows="9" spellcheck="false"
                 placeholder="JUL 774 - HONOKA YONEKURA-RM&#10;ABC 123 - ARTIS SATU, ARTIS DUA"
                 class="w-full rounded-lg border border-slate-700 bg-slate-800 text-slate-100 placeholder-slate-500 px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400"></textarea>
 
       <label class="mt-3 flex items-start gap-2 text-sm text-slate-300 cursor-pointer select-none">
         <input id="importOverwrite" type="checkbox" class="mt-0.5 w-4 h-4 rounded border-slate-600 bg-slate-800 accent-indigo-500" />
-        <span>Timpa data jika kode sudah ada <span class="text-slate-500">(rating dan kategori lama akan diganti). Jika tidak dicentang, kode yang sudah ada dilewati.</span></span>
+        <span>Timpa data jika kode sudah ada <span class="text-slate-500">(kategori, artis, dan rating lama akan diganti). Jika tidak dicentang, kode yang sudah ada dilewati.</span></span>
       </label>
 
       <div id="importResult" class="hidden mt-3 rounded-lg border border-slate-700 bg-slate-800/60 text-sm px-3 py-2 space-y-1"></div>
@@ -221,10 +260,26 @@
       const SUPABASE_KEY = 'sb_publishable_kRwzvXuWRs0T9xUn4KuqzQ_mYkPLuAq';
       const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-      const TABLE = 'movies';
+      const TABLE = 'movies';           // film yang sudah ditonton
+      const WATCH_TABLE = 'watchlist';  // film yang belum ditonton
       const PAGE_SIZE = 1000;   // batas baris per permintaan Supabase
       const WRITE_CHUNK = 500;  // jumlah baris per upsert
       const DELETE_CHUNK = 100; // jumlah kode per delete
+
+      // SQL untuk membuat tabel watchlist (ditampilkan di banner jika tabel belum ada)
+      const WATCH_SQL = [
+        'create table if not exists public.watchlist (',
+        '  code text primary key,',
+        "  categories text[] not null default '{}',",
+        "  artists text[] not null default '{}',",
+        '  created_at timestamptz not null default now()',
+        ');',
+        'alter table public.watchlist enable row level security;',
+        '-- Kebijakan terbuka ini sengaja dibuat. Samakan dengan kebijakan RLS tabel movies milikmu.',
+        'drop policy if exists "watchlist_all" on public.watchlist;',
+        'create policy "watchlist_all" on public.watchlist',
+        '  for all using (true) with check (true);'
+      ].join('\n');
 
       /* =========================================================
          KONSTANTA & STATE
@@ -245,24 +300,33 @@
       const $ = (id) => document.getElementById(id);
       const form = $('movieForm'), codeEl = $('code'), codeError = $('codeError');
       const categoryGroup = $('categoryGroup');
+      const ratingBlock = $('ratingBlock'), artistBlock = $('artistBlock');
       const ratingEl = $('rating'), ratingValueEl = $('ratingValue'), ratingPreview = $('ratingPreview');
       const hotEl = $('hot'), unratedEl = $('unrated');
       const tagWrap = $('tagWrap'), tagList = $('tagList'), artistInput = $('artistInput');
       const artistCount = $('artistCount'), artistMsg = $('artistMsg'), suggestionsEl = $('suggestions');
       const saveMsg = $('saveMsg'), submitBtn = $('submitBtn'), cancelEditBtn = $('cancelEdit');
-      const formTitle = $('formTitle'), editBanner = $('editBanner'), editBannerCode = $('editBannerCode');
-      const output = $('output'), emptyState = $('emptyState'), summary = $('summary'), searchEl = $('search');
+      const formTitle = $('formTitle'), editBanner = $('editBanner'), editBannerText = $('editBannerText'), editBannerCode = $('editBannerCode');
+      const output = $('output'), emptyState = $('emptyState'), summary = $('summary'), searchEl = $('search'), listTitle = $('listTitle');
       const importModal = $('importModal'), importText = $('importText'), importOverwrite = $('importOverwrite');
       const importResult = $('importResult'), runImportBtn = $('runImport');
       const dbBanner = $('dbBanner'), migrateBanner = $('migrateBanner'), migrateCount = $('migrateCount'), migrateBtn = $('migrateBtn');
+      const watchSetupBanner = $('watchSetupBanner');
+      const tabWatched = $('tabWatched'), tabWatchlist = $('tabWatchlist');
+      const countWatched = $('countWatched'), countWatchlist = $('countWatchlist');
 
+      let view = 'watched';       // 'watched' (Sudah Ditonton) atau 'watchlist' (Belum Ditonton)
       let tags = [];
       let editingKey = null;      // kunci (kode ter-normalisasi) data yang sedang diedit
+      let moveKey = null;         // kunci entri watchlist yang sedang dipindah ke Sudah Ditonton
+      let modeCode = '';          // kode yang ditampilkan di banner edit/pindah
       let uid = 0;
       let msgTimer = null;
       let suggestionItems = [];
       let activeIndex = -1;
-      let moviesCache = [];       // salinan data dari Supabase (sumber kebenaran tetap di database)
+      let moviesCache = [];       // salinan data Sudah Ditonton dari Supabase
+      let watchCache = [];        // salinan data Belum Ditonton dari Supabase
+      let watchReady = true;      // false jika tabel watchlist belum dibuat
       let hasLoadedOnce = false;
       let saving = false;
 
@@ -299,8 +363,15 @@
       }
       function hideDbError() { dbBanner.classList.add('hidden'); dbBanner.textContent = ''; }
 
+      // Kesalahan "tabel tidak ditemukan" dari Supabase / PostgREST / Postgres
+      function isMissingTable(err) {
+        if (!err) return false;
+        if (err.code === 'PGRST205' || err.code === '42P01') return true;
+        return /could not find the table|does not exist/i.test(errText(err));
+      }
+
       /* =========================================================
-         MANAJEMEN DATA (Supabase, Primary Key = kolom "code")
+         MANAJEMEN DATA: SUDAH DITONTON (tabel movies, Primary Key = "code")
       ========================================================= */
       function normalizeRow(m) {
         const code = normalizeCode(m && m.code);
@@ -362,11 +433,80 @@
         }
       }
 
-      // Daftar artis untuk autocomplete: diturunkan dari data film di cache
+      /* =========================================================
+         MANAJEMEN DATA: BELUM DITONTON (tabel watchlist, Primary Key = "code")
+      ========================================================= */
+      function normalizeWatchRow(m) {
+        const code = normalizeCode(m && m.code);
+        if (!code) return null;
+        const validCats = CATEGORIES.map((c) => c.name);
+        const cats = Array.isArray(m.categories) ? m.categories : [];
+        return {
+          code: code,
+          categories: cats.filter((c, i) => validCats.includes(c) && cats.indexOf(c) === i),
+          artists: Array.isArray(m.artists) ? m.artists.map(toTitleCase).filter(Boolean) : []
+        };
+      }
+
+      // Tidak pernah melempar error. Return null jika sukses (atau tabel belum ada), atau objek error lain.
+      async function fetchWatchlist() {
+        try {
+          const rows = [];
+          for (let from = 0; ; from += PAGE_SIZE) {
+            const { data, error } = await supabaseClient
+              .from(WATCH_TABLE)
+              .select('code, categories, artists')
+              .order('code', { ascending: true })
+              .range(from, from + PAGE_SIZE - 1);
+            if (error) throw error;
+            rows.push(...(data || []));
+            if (!data || data.length < PAGE_SIZE) break;
+          }
+          const map = new Map();
+          rows.forEach((r) => {
+            const row = normalizeWatchRow(r);
+            if (row) map.set(codeKey(row.code), row);
+          });
+          watchCache = Array.from(map.values());
+          watchReady = true;
+          watchSetupBanner.classList.add('hidden');
+          return null;
+        } catch (err) {
+          if (isMissingTable(err)) {
+            watchCache = [];
+            watchReady = false;
+            watchSetupBanner.classList.remove('hidden');
+            return null;
+          }
+          return err;   // kesalahan sementara: cache lama dipertahankan
+        }
+      }
+
+      async function upsertWatch(list) {
+        const rows = list.map((m) => ({ code: m.code, categories: m.categories, artists: m.artists }));
+        for (let i = 0; i < rows.length; i += WRITE_CHUNK) {
+          const { error } = await supabaseClient
+            .from(WATCH_TABLE)
+            .upsert(rows.slice(i, i + WRITE_CHUNK), { onConflict: 'code' });
+          if (error) throw error;
+        }
+      }
+
+      async function deleteWatch(codes) {
+        for (let i = 0; i < codes.length; i += DELETE_CHUNK) {
+          const { error } = await supabaseClient
+            .from(WATCH_TABLE)
+            .delete()
+            .in('code', codes.slice(i, i + DELETE_CHUNK));
+          if (error) throw error;
+        }
+      }
+
+      // Daftar artis untuk autocomplete: diturunkan dari kedua daftar film di cache
       function loadArtistList() {
         const seen = new Set();
         const all = [];
-        moviesCache.forEach((m) => m.artists.forEach((a) => {
+        moviesCache.concat(watchCache).forEach((m) => m.artists.forEach((a) => {
           const k = a.toLowerCase();
           if (!seen.has(k)) { seen.add(k); all.push(a); }
         }));
@@ -377,7 +517,7 @@
          KATEGORI (CHECKBOX)
       ========================================================= */
       function renderCategoryInputs() {
-        categoryGroup.innerHTML = CATEGORIES.map((c, i) =>
+        categoryGroup.innerHTML = CATEGORIES.map((c) =>
           '<label class="relative cursor-pointer select-none">' +
             '<input type="checkbox" name="category" value="' + escapeHTML(c.name) + '" class="peer sr-only" />' +
             '<span class="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-400 transition hover:border-slate-500 ' + c.pill +
@@ -608,10 +748,116 @@
       });
 
       /* =========================================================
+         TAB / VIEW
+      ========================================================= */
+      function updateTabs() {
+        const isWatch = view === 'watchlist';
+        const ACTIVE = ['bg-indigo-600', 'text-white', 'shadow'];
+        const INACTIVE = ['text-slate-400', 'hover:text-slate-100'];
+        [[tabWatched, !isWatch], [tabWatchlist, isWatch]].forEach(([el, on]) => {
+          ACTIVE.forEach((c) => el.classList.toggle(c, on));
+          INACTIVE.forEach((c) => el.classList.toggle(c, !on));
+          el.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
+        countWatched.textContent = hasLoadedOnce ? moviesCache.length : '';
+        countWatchlist.textContent = hasLoadedOnce && watchReady ? watchCache.length : '';
+        listTitle.textContent = isWatch ? 'Belum Ditonton' : 'Sudah Ditonton';
+      }
+
+      function setView(next) {
+        if (next === view) return;
+        view = next;
+        searchEl.value = '';
+        resetForm();
+        render(false);
+      }
+
+      tabWatched.addEventListener('click', () => setView('watched'));
+      tabWatchlist.addEventListener('click', () => setView('watchlist'));
+
+      /* =========================================================
          RENDER OUTPUT (urut A-Z berdasarkan Kode Film)
          render()      -> ambil data terbaru dari Supabase, lalu gambar ulang
-         render(false) -> gambar ulang dari cache (dipakai pencarian/edit, tanpa permintaan jaringan)
+         render(false) -> gambar ulang dari cache (dipakai pencarian/edit/tab, tanpa permintaan jaringan)
       ========================================================= */
+      function artistTagsHTML(m) {
+        return m.artists.length
+          ? m.artists.map((a) => '<span class="bg-indigo-500/15 text-indigo-200 ring-1 ring-inset ring-indigo-400/25 text-xs font-medium rounded-full px-2.5 py-1">' + escapeHTML(a) + '</span>').join('')
+          : '<span class="text-xs text-slate-500 italic">Tanpa artis</span>';
+      }
+
+      function catBadgesHTML(m) {
+        return m.categories.length
+          ? m.categories.map((name) => {
+              const c = CATEGORIES.find((x) => x.name === name);
+              const style = c ? c.badge : 'bg-slate-500/15 text-slate-300 ring-slate-400/40';
+              return '<span class="text-xs font-medium px-2 py-0.5 rounded-full ring-1 ring-inset ' + style + '">' + escapeHTML(name) + '</span>';
+            }).join('')
+          : '<span class="text-xs text-slate-500 italic">Tanpa kategori</span>';
+      }
+
+      function editButtonHTML(key) {
+        return '<button type="button" data-edit="' + escapeHTML(key) + '" class="inline-flex items-center gap-1.5 rounded-lg bg-slate-800 hover:bg-indigo-600 text-slate-200 hover:text-white text-sm font-medium px-3 py-1.5 transition">' +
+          '<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>Edit' +
+          '</button>';
+      }
+
+      function deleteButtonHTML(key) {
+        return '<button type="button" data-delete="' + escapeHTML(key) + '" class="text-xs text-slate-500 hover:text-rose-400 transition px-2 py-1.5">Hapus</button>';
+      }
+
+      function watchedCardHTML(m) {
+        const key = codeKey(m.code);
+        const isEditing = editingKey === key;
+        const border = isEditing ? 'border-amber-400 ring-2 ring-amber-400/40'
+                     : m.hot ? 'border-orange-500/50 ring-1 ring-orange-500/30'
+                     : 'border-slate-800';
+
+        return '<article class="bg-slate-900 rounded-2xl border ' + border + ' shadow-lg overflow-hidden fade-in flex flex-col">' +
+          '<header class="bg-gradient-to-r from-indigo-600/80 to-violet-700/80 px-4 py-3">' +
+            '<h3 class="font-mono font-bold text-white break-all">' + escapeHTML(m.code) + '</h3>' +
+          '</header>' +
+          '<div class="p-4 flex flex-col gap-3 flex-1">' +
+            '<div class="flex flex-wrap gap-1.5">' + artistTagsHTML(m) + '</div>' +
+            '<div class="flex flex-wrap gap-1.5">' + catBadgesHTML(m) + '</div>' +
+            '<div class="mt-auto pt-3 border-t border-slate-800 flex items-center justify-between gap-2">' +
+              renderRating(m.rating, m.hot, 5) +
+              '<span class="text-sm font-semibold ' + (m.rating > 0 ? 'text-slate-300' : 'text-slate-500 text-xs font-normal') + '">' + (m.rating > 0 ? m.rating.toFixed(1) : 'Belum dinilai') + '</span>' +
+            '</div>' +
+            '<div class="flex items-center justify-between gap-2">' + editButtonHTML(key) + deleteButtonHTML(key) + '</div>' +
+          '</div>' +
+        '</article>';
+      }
+
+      function watchCardHTML(m) {
+        const key = codeKey(m.code);
+        const isEditing = editingKey === key;
+        const border = isEditing ? 'border-amber-400 ring-2 ring-amber-400/40' : 'border-slate-800';
+
+        return '<article class="bg-slate-900 rounded-2xl border ' + border + ' shadow-lg overflow-hidden fade-in flex flex-col">' +
+          '<header class="bg-gradient-to-r from-teal-600/70 to-sky-700/70 px-4 py-3">' +
+            '<h3 class="font-mono font-bold text-white break-all">' + escapeHTML(m.code) + '</h3>' +
+          '</header>' +
+          '<div class="p-4 flex flex-col gap-3 flex-1">' +
+            '<div class="flex flex-wrap gap-1.5">' + artistTagsHTML(m) + '</div>' +
+            '<div class="flex flex-wrap gap-1.5">' + catBadgesHTML(m) + '</div>' +
+            '<div class="mt-auto pt-3 border-t border-slate-800 flex flex-wrap items-center justify-between gap-2">' +
+              '<button type="button" data-watched="' + escapeHTML(key) + '" class="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium px-3 py-1.5 transition">✔ Sudah Ditonton</button>' +
+              '<div class="flex items-center gap-1">' + editButtonHTML(key) + deleteButtonHTML(key) + '</div>' +
+            '</div>' +
+          '</div>' +
+        '</article>';
+      }
+
+      // Jika entri yang sedang diedit / dipindah sudah tidak ada setelah data dimuat ulang, batalkan mode tersebut
+      function reconcileForm() {
+        if (editingKey !== null) {
+          const list = view === 'watchlist' ? watchCache : moviesCache;
+          if (!list.some((m) => codeKey(m.code) === editingKey)) resetForm();
+        }
+        if (moveKey !== null && !watchCache.some((m) => codeKey(m.code) === moveKey)) resetForm();
+      }
+
       async function render(refetch) {
         if (refetch !== false) {
           if (!hasLoadedOnce) {
@@ -619,9 +865,10 @@
             emptyState.classList.add('hidden');
           }
           try {
-            await fetchMovies();
+            const results = await Promise.all([fetchMovies(), fetchWatchlist()]);
             hasLoadedOnce = true;
             hideDbError();
+            if (results[1]) showDbError(results[1], 'Gagal memuat Belum Ditonton');
           } catch (err) {
             showDbError(err, 'Gagal memuat data dari Supabase');
             if (!hasLoadedOnce) {
@@ -631,9 +878,13 @@
               return;
             }
           }
+          reconcileForm();
         }
 
-        const data = moviesCache.slice();
+        updateTabs();
+
+        const isWatch = view === 'watchlist';
+        const data = (isWatch ? watchCache : moviesCache).slice();
         data.sort((a, b) => a.code.localeCompare(b.code, 'id', { numeric: true, sensitivity: 'base' }));
 
         const q = searchEl.value.trim().toLowerCase();
@@ -645,70 +896,46 @@
           : data;
 
         summary.textContent = data.length ? '(' + (q ? list.length + ' dari ' : '') + data.length + ' film)' : '';
-        emptyState.classList.toggle('hidden', data.length > 0);
 
-        if (data.length && !list.length) {
+        if (!data.length) {
+          emptyState.textContent = isWatch
+            ? (watchReady
+                ? 'Belum ada film di daftar tonton. Tambahkan lewat form atau gunakan Impor Catatan.'
+                : 'Tabel watchlist belum dibuat. Jalankan SQL pada banner di atas halaman.')
+            : 'Belum ada data. Tambahkan film pertamamu atau gunakan Impor Catatan.';
+          emptyState.classList.remove('hidden');
+          output.innerHTML = '';
+          return;
+        }
+        emptyState.classList.add('hidden');
+
+        if (!list.length) {
           output.innerHTML = '<p class="col-span-full text-center text-slate-500 py-12">Tidak ada hasil yang cocok.</p>';
           return;
         }
 
-        output.innerHTML = list.map((m) => {
-          const key = codeKey(m.code);
-          const isEditing = editingKey === key;
-
-          const artistTags = m.artists.length
-            ? m.artists.map((a) => '<span class="bg-indigo-500/15 text-indigo-200 ring-1 ring-inset ring-indigo-400/25 text-xs font-medium rounded-full px-2.5 py-1">' + escapeHTML(a) + '</span>').join('')
-            : '<span class="text-xs text-slate-500 italic">Tanpa artis</span>';
-
-          const catBadges = m.categories.length
-            ? m.categories.map((name) => {
-                const c = CATEGORIES.find((x) => x.name === name);
-                const style = c ? c.badge : 'bg-slate-500/15 text-slate-300 ring-slate-400/40';
-                return '<span class="text-xs font-medium px-2 py-0.5 rounded-full ring-1 ring-inset ' + style + '">' + escapeHTML(name) + '</span>';
-              }).join('')
-            : '<span class="text-xs text-slate-500 italic">Tanpa kategori</span>';
-
-          const border = isEditing ? 'border-amber-400 ring-2 ring-amber-400/40'
-                       : m.hot ? 'border-orange-500/50 ring-1 ring-orange-500/30'
-                       : 'border-slate-800';
-
-          return '<article class="bg-slate-900 rounded-2xl border ' + border + ' shadow-lg overflow-hidden fade-in flex flex-col">' +
-            '<header class="bg-gradient-to-r from-indigo-600/80 to-violet-700/80 px-4 py-3">' +
-              '<h3 class="font-mono font-bold text-white break-all">' + escapeHTML(m.code) + '</h3>' +
-            '</header>' +
-            '<div class="p-4 flex flex-col gap-3 flex-1">' +
-              '<div class="flex flex-wrap gap-1.5">' + artistTags + '</div>' +
-              '<div class="flex flex-wrap gap-1.5">' + catBadges + '</div>' +
-              '<div class="mt-auto pt-3 border-t border-slate-800 flex items-center justify-between gap-2">' +
-                renderRating(m.rating, m.hot, 5) +
-                '<span class="text-sm font-semibold ' + (m.rating > 0 ? 'text-slate-300' : 'text-slate-500 text-xs font-normal') + '">' + (m.rating > 0 ? m.rating.toFixed(1) : 'Belum dinilai') + '</span>' +
-              '</div>' +
-              '<div class="flex items-center justify-between gap-2">' +
-                '<button type="button" data-edit="' + escapeHTML(key) + '" class="inline-flex items-center gap-1.5 rounded-lg bg-slate-800 hover:bg-indigo-600 text-slate-200 hover:text-white text-sm font-medium px-3 py-1.5 transition">' +
-                  '<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>Edit' +
-                '</button>' +
-                '<button type="button" data-delete="' + escapeHTML(key) + '" class="text-xs text-slate-500 hover:text-rose-400 transition px-2 py-1.5">Hapus</button>' +
-              '</div>' +
-            '</div>' +
-          '</article>';
-        }).join('');
+        output.innerHTML = list.map(isWatch ? watchCardHTML : watchedCardHTML).join('');
       }
 
       output.addEventListener('click', async (e) => {
+        const watchedBtn = e.target.closest('[data-watched]');
+        if (watchedBtn) { startMove(watchedBtn.dataset.watched); return; }
+
         const editBtn = e.target.closest('[data-edit]');
         if (editBtn) { startEdit(editBtn.dataset.edit); return; }
 
         const delBtn = e.target.closest('[data-delete]');
         if (delBtn) {
+          const isWatch = view === 'watchlist';
           const key = delBtn.dataset.delete;
-          const target = moviesCache.find((m) => codeKey(m.code) === key);
+          const target = (isWatch ? watchCache : moviesCache).find((m) => codeKey(m.code) === key);
           if (!target) return;
-          if (!confirm('Hapus film ini dari histori?')) return;
+          if (!confirm(isWatch ? 'Hapus film ini dari daftar Belum Ditonton?' : 'Hapus film ini dari histori?')) return;
 
           delBtn.disabled = true;
           delBtn.textContent = 'Menghapus…';
           try {
-            await deleteMovies([target.code]);
+            await (isWatch ? deleteWatch([target.code]) : deleteMovies([target.code]));
             hideDbError();
           } catch (err) {
             showDbError(err, 'Gagal menghapus data');
@@ -723,7 +950,7 @@
       searchEl.addEventListener('input', () => render(false));
 
       /* =========================================================
-         FORM: SIMPAN / EDIT / UPDATE
+         FORM: SIMPAN / EDIT / UPDATE / PINDAH KE SUDAH DITONTON
       ========================================================= */
       function flashMessage(text, isError) {
         saveMsg.textContent = (isError ? '✖ ' : '✔ ') + text;
@@ -734,56 +961,99 @@
         msgTimer = setTimeout(() => saveMsg.classList.add('hidden'), isError ? 5000 : 2800);
       }
 
-      function setEditMode(on, code) {
-        formTitle.textContent = on ? 'Edit Film' : 'Tambah Film';
-        submitBtn.textContent = on ? 'Update Data' : 'Simpan';
-        cancelEditBtn.classList.toggle('hidden', !on);
-        editBanner.classList.toggle('hidden', !on);
-        editBannerCode.textContent = on ? code : '';
+      // Sesuaikan judul, tombol, banner, dan bagian form dengan view serta mode (edit / pindah) saat ini
+      function refreshFormChrome() {
+        const isWatch = view === 'watchlist';
+        const editing = editingKey !== null;
+        const moving = moveKey !== null;
+
+        formTitle.textContent = isWatch
+          ? (editing ? 'Edit Belum Ditonton' : 'Tambah ke Belum Ditonton')
+          : (moving ? 'Tandai Sudah Ditonton' : (editing ? 'Edit Film' : 'Tambah Film'));
+
+        submitBtn.textContent = saving ? 'Menyimpan…' : (editing ? 'Update Data' : (moving ? 'Simpan ke Riwayat' : 'Simpan'));
+        cancelEditBtn.classList.toggle('hidden', !(editing || moving));
+        editBanner.classList.toggle('hidden', !(editing || moving));
+        editBannerText.textContent = moving ? '🎞️ Memindahkan dari Belum Ditonton:' : '✏️ Mode edit:';
+        editBannerCode.textContent = (editing || moving) ? modeCode : '';
+
+        ratingBlock.classList.toggle('hidden', isWatch);
+        artistBlock.classList.toggle('md:col-span-2', isWatch);
       }
 
       function setSaving(on) {
         saving = on;
         submitBtn.disabled = on;
-        submitBtn.textContent = on ? 'Menyimpan…' : (editingKey !== null ? 'Update Data' : 'Simpan');
+        refreshFormChrome();
       }
 
       function resetForm() {
         form.reset();
         tags = [];
         editingKey = null;
+        moveKey = null;
+        modeCode = '';
         artistInput.value = '';
         codeError.classList.add('hidden');
         codeEl.classList.remove('border-rose-400');
         setCategories([]);
         resetArtistMsg();
-        setEditMode(false);
         renderTags();
         updateRatingUI();
         hideSuggestions();
+        refreshFormChrome();
+      }
+
+      function scrollToForm() {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        setTimeout(() => codeEl.focus({ preventScroll: true }), 350);
       }
 
       function startEdit(key) {
-        const movie = moviesCache.find((m) => codeKey(m.code) === key);
-        if (!movie) return;
+        const isWatch = view === 'watchlist';
+        const item = (isWatch ? watchCache : moviesCache).find((m) => codeKey(m.code) === key);
+        if (!item) return;
 
+        moveKey = null;
         editingKey = key;
-        codeEl.value = movie.code;
-        setCategories(movie.categories);
-        hotEl.checked = movie.hot;
-        unratedEl.checked = movie.rating <= 0;
-        ratingEl.value = movie.rating > 0 ? movie.rating : 3;
-        tags = movie.artists.slice(0, MAX_ARTISTS);
+        modeCode = item.code;
+        codeEl.value = item.code;
+        setCategories(item.categories);
+        if (!isWatch) {
+          hotEl.checked = item.hot;
+          unratedEl.checked = item.rating <= 0;
+          ratingEl.value = item.rating > 0 ? item.rating : 3;
+        }
+        tags = item.artists.slice(0, MAX_ARTISTS);
         artistInput.value = '';
         codeError.classList.add('hidden');
         resetArtistMsg();
-        setEditMode(true, movie.code);
         renderTags();
         updateRatingUI();
+        refreshFormChrome();
         render(false);
+        scrollToForm();
+      }
 
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-        setTimeout(() => codeEl.focus({ preventScroll: true }), 350);
+      // Pindahkan entri Belum Ditonton ke Sudah Ditonton: pindah tab, isi form, lalu user menambahkan rating
+      function startMove(key) {
+        const item = watchCache.find((m) => codeKey(m.code) === key);
+        if (!item) return;
+
+        view = 'watched';
+        searchEl.value = '';
+        resetForm();
+
+        moveKey = key;
+        modeCode = item.code;
+        codeEl.value = item.code;
+        setCategories(item.categories);
+        tags = item.artists.slice(0, MAX_ARTISTS);
+        renderTags();
+        updateRatingUI();
+        refreshFormChrome();
+        render(false);
+        scrollToForm();
       }
 
       ratingEl.addEventListener('input', updateRatingUI);
@@ -798,23 +1068,7 @@
         }
       });
 
-      form.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        if (saving) return;
-
-        if (artistInput.value.trim() && addTag(artistInput.value)) artistInput.value = '';
-        hideSuggestions();
-
-        const code = normalizeCode(codeEl.value);
-        if (!code) {
-          codeError.classList.remove('hidden');
-          codeEl.classList.add('border-rose-400');
-          codeEl.focus();
-          return;
-        }
-
-        const key = codeKey(code);
-        const isEdit = editingKey !== null;
+      async function saveWatchedEntry(code, key, isEdit) {
         const collides = moviesCache.some((m) => codeKey(m.code) === key);
 
         // Kode sudah dipakai entri lain (bukan entri yang sedang diedit)
@@ -839,6 +1093,11 @@
           })
           .map((m) => m.code);
 
+        // Film yang sudah ditonton otomatis keluar dari Belum Ditonton
+        const inWatch = watchReady
+          ? watchCache.filter((m) => codeKey(m.code) === key).map((m) => m.code)
+          : [];
+
         setSaving(true);
         try {
           await upsertMovies([entry]);
@@ -850,16 +1109,96 @@
           flashMessage('Gagal menyimpan. Data belum tersimpan.', true);
           return;
         }
+
+        let removedFromWatch = false;
+        if (inWatch.length) {
+          try {
+            await deleteWatch(inWatch);
+            removedFromWatch = true;
+          } catch (err) {
+            showDbError(err, 'Film tersimpan, tetapi gagal menghapusnya dari Belum Ditonton');
+          }
+        }
         setSaving(false);
 
         resetForm();
         await render();
-        flashMessage(isEdit ? 'Data berhasil diperbarui.' : 'Data berhasil disimpan.');
+        flashMessage((isEdit ? 'Data berhasil diperbarui.' : 'Data berhasil disimpan.') + (removedFromWatch ? ' Dihapus dari Belum Ditonton.' : ''));
         if (!isEdit) codeEl.focus();
+      }
+
+      async function saveWatchEntry(code, key, isEdit) {
+        if (!watchReady) {
+          flashMessage('Tabel watchlist belum dibuat. Lihat banner SQL di atas.', true);
+          return;
+        }
+
+        // Sudah ada di Sudah Ditonton?
+        if (moviesCache.some((m) => codeKey(m.code) === key) && key !== editingKey) {
+          if (!confirm('Kode "' + code + '" sudah ada di Sudah Ditonton. Tetap tambahkan ke Belum Ditonton?')) return;
+        }
+
+        const collides = watchCache.some((m) => codeKey(m.code) === key);
+        if (collides && (!isEdit || editingKey !== key)) {
+          if (!confirm('Kode "' + code + '" sudah ada di Belum Ditonton. Timpa data lama?')) return;
+        }
+
+        const entry = {
+          code: code,
+          categories: selectedCategories(),
+          artists: tags.slice(0, MAX_ARTISTS)
+        };
+
+        const staleCodes = watchCache
+          .filter((m) => {
+            const k = codeKey(m.code);
+            return (k === key || (isEdit && k === editingKey)) && m.code !== code;
+          })
+          .map((m) => m.code);
+
+        setSaving(true);
+        try {
+          await upsertWatch([entry]);
+          if (staleCodes.length) await deleteWatch(staleCodes);
+          hideDbError();
+        } catch (err) {
+          setSaving(false);
+          showDbError(err, 'Gagal menyimpan data');
+          flashMessage('Gagal menyimpan. Data belum tersimpan.', true);
+          return;
+        }
+        setSaving(false);
+
+        resetForm();
+        await render();
+        flashMessage(isEdit ? 'Data berhasil diperbarui.' : 'Ditambahkan ke Belum Ditonton.');
+        if (!isEdit) codeEl.focus();
+      }
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (saving) return;
+
+        if (artistInput.value.trim() && addTag(artistInput.value)) artistInput.value = '';
+        hideSuggestions();
+
+        const code = normalizeCode(codeEl.value);
+        if (!code) {
+          codeError.classList.remove('hidden');
+          codeEl.classList.add('border-rose-400');
+          codeEl.focus();
+          return;
+        }
+
+        const key = codeKey(code);
+        const isEdit = editingKey !== null;
+
+        if (view === 'watchlist') await saveWatchEntry(code, key, isEdit);
+        else await saveWatchedEntry(code, key, isEdit);
       });
 
       /* =========================================================
-         IMPOR MASSAL
+         IMPOR MASSAL (untuk Sudah Ditonton maupun Belum Ditonton)
       ========================================================= */
       // Parsing satu baris. Return { ok, code, categories, artists, truncated } atau { ok:false, reason }
       function parseImportLine(line) {
@@ -899,22 +1238,37 @@
         return { ok: true, code: code, categories: categories, artists: artists, truncated: truncated };
       }
 
+      function importTargetValue() {
+        const checked = importModal.querySelector('input[name="importTarget"]:checked');
+        return checked ? checked.value : 'watched';
+      }
+
       async function runImport() {
         const lines = importText.value.split(/\r?\n/).filter((l) => l.trim() !== '');
         if (!lines.length) { showImportResult('<p class="text-amber-300">Textarea masih kosong.</p>'); return; }
+
+        const toWatch = importTargetValue() === 'watchlist';
 
         runImportBtn.disabled = true;
         runImportBtn.textContent = 'Mengimpor…';
 
         try {
           // Sinkronkan cache dulu agar deteksi kode yang sudah ada akurat
-          await fetchMovies();
+          await Promise.all([fetchMovies(), fetchWatchlist()]);
+
+          if (toWatch && !watchReady) {
+            showImportResult('<p class="text-rose-300">✖ Tabel watchlist belum ada di Supabase. Jalankan SQL pada banner di atas halaman, lalu coba lagi.</p>');
+            return;
+          }
 
           const overwrite = importOverwrite.checked;
-          const working = new Map(moviesCache.map((m) => [codeKey(m.code), m]));  // keadaan data setelah impor
+          const ownList = toWatch ? watchCache : moviesCache;
+          const otherKeys = new Set((toWatch ? moviesCache : watchCache).map((m) => codeKey(m.code)));
+          const working = new Map(ownList.map((m) => [codeKey(m.code), m]));   // keadaan daftar tujuan setelah impor
           const upserts = new Map();     // key -> entry yang ditulis ke Supabase
           const staleCodes = new Set();  // kode lama (beda huruf besar/kecil) yang harus dihapus
-          let added = 0, updated = 0, skipped = 0, trimmed = 0;
+          const movedKeys = new Set();   // kode yang ikut dihapus dari Belum Ditonton (karena masuk Sudah Ditonton)
+          let added = 0, updated = 0, skipped = 0, trimmed = 0, alreadyWatched = 0;
           const invalid = [];
 
           lines.forEach((line, n) => {
@@ -922,7 +1276,13 @@
             if (!p.ok) { invalid.push('Baris ' + (n + 1) + ': ' + p.reason); return; }
 
             const key = codeKey(p.code);
-            const entry = { code: p.code, categories: p.categories, rating: 0, hot: false, artists: p.artists };
+
+            // Film yang sudah ada di Sudah Ditonton tidak perlu masuk Belum Ditonton
+            if (toWatch && otherKeys.has(key)) { alreadyWatched++; return; }
+
+            const entry = toWatch
+              ? { code: p.code, categories: p.categories, artists: p.artists }
+              : { code: p.code, categories: p.categories, rating: 0, hot: false, artists: p.artists };
             const existing = working.get(key);
 
             if (existing) {
@@ -934,19 +1294,30 @@
             }
             working.set(key, entry);
             upserts.set(key, entry);
+            if (!toWatch && otherKeys.has(key)) movedKeys.add(key);
             if (p.truncated) trimmed++;
           });
 
-          if (upserts.size) await upsertMovies(Array.from(upserts.values()));
-          const toDelete = Array.from(staleCodes).filter((c) => !Array.from(upserts.values()).some((u) => u.code === c));
-          if (toDelete.length) await deleteMovies(toDelete);
+          const entries = Array.from(upserts.values());
+          if (entries.length) await (toWatch ? upsertWatch(entries) : upsertMovies(entries));
+
+          const written = new Set(entries.map((u) => u.code));
+          const toDelete = Array.from(staleCodes).filter((c) => !written.has(c));
+          if (toDelete.length) await (toWatch ? deleteWatch(toDelete) : deleteMovies(toDelete));
+
+          let moved = 0;
+          if (movedKeys.size && watchReady) {
+            const codes = watchCache.filter((w) => movedKeys.has(codeKey(w.code))).map((w) => w.code);
+            if (codes.length) { await deleteWatch(codes); moved = codes.length; }
+          }
 
           hideDbError();
-          if (editingKey !== null && !working.has(editingKey)) resetForm();
           await render();
 
-          let html = '<p class="text-emerald-300 font-medium">✔ Selesai: ' + added + ' ditambahkan, ' + updated + ' diperbarui.</p>';
+          let html = '<p class="text-emerald-300 font-medium">✔ Selesai (' + (toWatch ? 'Belum Ditonton' : 'Sudah Ditonton') + '): ' + added + ' ditambahkan, ' + updated + ' diperbarui.</p>';
           if (skipped) html += '<p class="text-slate-300">' + skipped + ' dilewati (kode sudah ada).</p>';
+          if (alreadyWatched) html += '<p class="text-slate-300">' + alreadyWatched + ' dilewati (sudah ada di Sudah Ditonton).</p>';
+          if (moved) html += '<p class="text-sky-300">' + moved + ' dihapus dari Belum Ditonton karena sudah masuk Sudah Ditonton.</p>';
           if (trimmed) html += '<p class="text-amber-300">' + trimmed + ' baris punya lebih dari ' + MAX_ARTISTS + ' artis; hanya ' + MAX_ARTISTS + ' pertama yang disimpan.</p>';
           if (invalid.length) {
             html += '<p class="text-rose-300">' + invalid.length + ' baris dilewati karena format tidak valid:</p><ul class="list-disc pl-5 text-rose-300/90 text-xs">' +
@@ -972,6 +1343,8 @@
       function openImport() {
         importResult.classList.add('hidden');
         importResult.innerHTML = '';
+        // Target impor mengikuti tab yang sedang aktif
+        importModal.querySelectorAll('input[name="importTarget"]').forEach((r) => { r.checked = r.value === view; });
         importModal.classList.remove('hidden');
         document.body.classList.add('overflow-hidden');
         setTimeout(() => importText.focus(), 50);
@@ -994,7 +1367,7 @@
          MANAJEMEN BACKUP DATA (Ekspor / Pulihkan JSON)
       ========================================================= */
 
-      // Ekspor: seluruh data film + daftar artis -> file backup_histori_film.json
+      // Ekspor: film Sudah Ditonton + Belum Ditonton + daftar artis -> file backup_histori_film.json
       async function exportData() {
         try {
           await fetchMovies();   // pastikan backup berisi data terbaru di Supabase
@@ -1002,13 +1375,20 @@
           showDbError(err, 'Gagal mengambil data untuk backup');
           return;
         }
+        const watchErr = await fetchWatchlist();
+        if (watchErr) {
+          showDbError(watchErr, 'Gagal mengambil Belum Ditonton untuk backup');
+          return;
+        }
         const payload = {
           app: 'histori-film',
-          version: 1,
+          version: 2,
           exportedAt: new Date().toISOString(),
           movies: moviesCache,
           artists: loadArtistList()
         };
+        if (watchReady) payload.watchlist = watchCache;
+
         const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -1050,6 +1430,7 @@
 
       // Pulihkan: baca file JSON, validasi, lalu timpa isi tabel Supabase.
       // Urutan aman: upsert data backup dulu, baru hapus baris yang tidak ada di backup.
+      // Bagian "watchlist" hanya diproses jika ada di file backup (backup lama tanpa watchlist tidak menyentuh Belum Ditonton).
       function importData(event) {
         const input = event.target;
         const file = input.files && input.files[0];
@@ -1068,7 +1449,8 @@
           }
 
           const formatOk = data && typeof data === 'object' && !Array.isArray(data) &&
-            Array.isArray(data.movies) && (data.artists === undefined || Array.isArray(data.artists));
+            Array.isArray(data.movies) && (data.artists === undefined || Array.isArray(data.artists)) &&
+            (data.watchlist === undefined || Array.isArray(data.watchlist));
           if (!formatOk) {
             alert('Format file tidak valid!');
             input.value = '';
@@ -1087,6 +1469,21 @@
           }
           const movies = Array.from(movieMap.values());
 
+          let watchItems = null;
+          if (data.watchlist !== undefined) {
+            const watchMap = new Map();
+            for (const raw of data.watchlist) {
+              const s = sanitizeBackupMovie(raw);
+              if (!s) {
+                alert('Format file tidak valid!');
+                input.value = '';
+                return;
+              }
+              watchMap.set(codeKey(s.code), { code: s.code, categories: s.categories, artists: s.artists });
+            }
+            watchItems = Array.from(watchMap.values());
+          }
+
           try {
             await fetchMovies();
           } catch (err) {
@@ -1094,17 +1491,32 @@
             input.value = '';
             return;
           }
+          await fetchWatchlist();
 
-          if (!confirm('Data saat ini (' + moviesCache.length + ' film) akan DITIMPA oleh isi backup (' + movies.length + ' film). Lanjutkan?')) {
+          const nowText = moviesCache.length + ' film' + (watchItems && watchReady ? ', ' + watchCache.length + ' belum ditonton' : '');
+          const backupText = movies.length + ' film' + (watchItems ? ', ' + watchItems.length + ' belum ditonton' : '');
+          if (!confirm('Data saat ini (' + nowText + ') akan DITIMPA oleh isi backup (' + backupText + '). Lanjutkan?')) {
             input.value = '';
             return;
           }
 
+          let skippedWatch = false;
           try {
             await upsertMovies(movies);
             const keep = new Set(movies.map((m) => m.code));
             const toDelete = moviesCache.filter((m) => !keep.has(m.code)).map((m) => m.code);
             if (toDelete.length) await deleteMovies(toDelete);
+
+            if (watchItems) {
+              if (!watchReady) {
+                skippedWatch = true;
+              } else {
+                if (watchItems.length) await upsertWatch(watchItems);
+                const keepWatch = new Set(watchItems.map((m) => m.code));
+                const toDeleteWatch = watchCache.filter((m) => !keepWatch.has(m.code)).map((m) => m.code);
+                if (toDeleteWatch.length) await deleteWatch(toDeleteWatch);
+              }
+            }
             hideDbError();
           } catch (err) {
             showDbError(err, 'Pemulihan data gagal');
@@ -1116,7 +1528,7 @@
           input.value = '';          // agar file yang sama bisa dipilih lagi
           resetForm();
           await render();
-          alert('Data berhasil dipulihkan!');
+          alert('Data berhasil dipulihkan!' + (skippedWatch ? '\nBagian Belum Ditonton dilewati karena tabel watchlist belum dibuat.' : ''));
         };
 
         reader.onerror = function () {
@@ -1177,12 +1589,35 @@
       });
 
       /* =========================================================
+         BANNER SQL WATCHLIST
+      ========================================================= */
+      $('watchSql').textContent = WATCH_SQL;
+      $('copySql').addEventListener('click', async () => {
+        const btn = $('copySql');
+        try {
+          await navigator.clipboard.writeText(WATCH_SQL);
+          btn.textContent = 'Tersalin ✔';
+        } catch (e) {
+          // Cadangan jika Clipboard API tidak tersedia: pilih teks agar bisa disalin manual
+          const range = document.createRange();
+          range.selectNodeContents($('watchSql'));
+          const sel = window.getSelection();
+          sel.removeAllRanges();
+          sel.addRange(range);
+          btn.textContent = 'Teks terpilih, tekan Ctrl+C';
+        }
+        setTimeout(() => { btn.textContent = 'Salin SQL'; }, 2500);
+      });
+
+      /* =========================================================
          INIT
       ========================================================= */
       renderCategoryInputs();
       syncCategoryTicks();
       renderTags();
       updateRatingUI();
+      refreshFormChrome();
+      updateTabs();
       checkLocalMigration();
 
       if (SUPABASE_KEY.indexOf('PASTE_') === 0) {
