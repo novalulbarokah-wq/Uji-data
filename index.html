@@ -1,0 +1,1195 @@
+<!DOCTYPE html>
+<html lang="id" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="dark" />
+  <title>Histori Film</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root { color-scheme: dark; }
+    body { background: radial-gradient(1200px 600px at 50% -200px, #1e1b4b 0%, #020617 60%) fixed, #020617; }
+
+    /* Slider rating */
+    input[type="range"] { -webkit-appearance: none; appearance: none; height: 8px; border-radius: 9999px; background: #334155; outline: none; transition: opacity .2s; }
+    input[type="range"]:disabled { opacity: .35; cursor: not-allowed; }
+    input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 22px; height: 22px; border-radius: 50%; background: #f59e0b; cursor: pointer; border: 3px solid #0f172a; box-shadow: 0 0 0 1px #f59e0b; }
+    input[type="range"]::-moz-range-thumb { width: 22px; height: 22px; border-radius: 50%; background: #f59e0b; cursor: pointer; border: 3px solid #0f172a; box-shadow: 0 0 0 1px #f59e0b; }
+
+    .tag-wrap:focus-within { box-shadow: 0 0 0 2px #818cf8; border-color: #818cf8; }
+    .fade-in { animation: fadeIn .25s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+    /* Toggle switch */
+    .switch { position: relative; width: 44px; height: 24px; flex-shrink: 0; }
+    .switch input { position: absolute; opacity: 0; inset: 0; width: 100%; height: 100%; cursor: pointer; z-index: 2; margin: 0; }
+    .switch .track { position: absolute; inset: 0; background: #475569; border-radius: 9999px; transition: background .2s; }
+    .switch .knob { position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; background: #f8fafc; border-radius: 50%; transition: transform .2s; box-shadow: 0 1px 3px rgba(0,0,0,.5); }
+    .switch input:checked ~ .track { background: #f97316; }
+    .switch input:checked ~ .knob { transform: translateX(20px); }
+    .switch input:focus-visible ~ .track { box-shadow: 0 0 0 3px rgba(251,146,60,.5); }
+
+    /* Api menyala */
+    .fire { display: inline-block; font-size: 1.15rem; line-height: 1; transform-origin: 50% 90%; animation: flicker 1.1s infinite ease-in-out; filter: drop-shadow(0 0 4px #f97316) drop-shadow(0 0 8px #fb923c); }
+    @keyframes flicker {
+      0%, 100% { transform: scale(1) rotate(-3deg); filter: drop-shadow(0 0 3px #f97316) drop-shadow(0 0 6px #fb923c); }
+      30% { transform: scale(1.18) rotate(3deg); filter: drop-shadow(0 0 6px #ef4444) drop-shadow(0 0 12px #f97316); }
+      60% { transform: scale(1.05) rotate(-2deg); }
+    }
+    @media (prefers-reduced-motion: reduce) { .fire, .fade-in { animation: none; } }
+
+    /* Scrollbar tipis */
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 9999px; }
+  </style>
+</head>
+<body class="min-h-screen text-slate-200 antialiased">
+  <div class="max-w-6xl mx-auto px-4 py-6 sm:py-10">
+
+    <header class="mb-6">
+      <h1 class="text-2xl sm:text-3xl font-bold text-white">🎬 Histori Film</h1>
+      <p class="text-slate-400 text-sm mt-1">Catat tontonanmu. Data tersimpan di Supabase dan diurutkan otomatis berdasarkan kode film.</p>
+    </header>
+
+    <!-- BANNER ERROR DATABASE -->
+    <div id="dbBanner" class="hidden mb-6 rounded-lg border border-rose-500/40 bg-rose-500/10 text-rose-200 text-sm px-3 py-2" role="alert"></div>
+
+    <!-- BANNER MIGRASI DATA LOKAL -->
+    <div id="migrateBanner" class="hidden mb-6 rounded-lg border border-sky-500/40 bg-sky-500/10 text-sky-200 text-sm px-3 py-2">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <span>Ada <strong id="migrateCount">0</strong> film lama di browser ini (localStorage) yang belum dipindah ke Supabase.</span>
+        <button type="button" id="migrateBtn"
+                class="rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-sm font-medium px-3 py-1.5 transition">
+          Unggah ke Supabase
+        </button>
+      </div>
+    </div>
+
+    <!-- FORM INPUT -->
+    <section id="formSection" class="bg-slate-900/80 backdrop-blur rounded-2xl shadow-xl border border-slate-800 p-4 sm:p-6 mb-8">
+      <div class="flex flex-wrap items-center justify-between gap-3 mb-5">
+        <h2 id="formTitle" class="text-lg font-semibold text-white">Tambah Film</h2>
+        <div class="flex flex-wrap items-center gap-2">
+        <button type="button" id="openImport"
+                class="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-medium px-3 py-2 transition">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
+          Impor Catatan
+        </button>
+        <button type="button" id="exportBtn" title="Unduh seluruh data sebagai file JSON"
+                class="inline-flex items-center gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white text-sm font-medium px-3 py-2 transition">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3m0 12l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
+          Unduh Backup (.json)
+        </button>
+        <button type="button" id="restoreBtn" title="Pulihkan data dari file backup JSON"
+                class="inline-flex items-center gap-2 rounded-lg border border-sky-500/50 bg-sky-500/10 hover:bg-sky-500/20 text-sky-200 text-sm font-medium px-3 py-2 transition">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0-12l-4 4m4-4l4 4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
+          Pulihkan Data
+        </button>
+        <input type="file" id="restoreFile" accept=".json,application/json" class="hidden" />
+        </div>
+      </div>
+
+      <div id="editBanner" class="hidden mb-5 rounded-lg border border-amber-500/40 bg-amber-500/10 text-amber-200 text-sm px-3 py-2">
+        ✏️ Mode edit: <span id="editBannerCode" class="font-mono font-semibold"></span>
+      </div>
+
+      <form id="movieForm" novalidate class="grid grid-cols-1 md:grid-cols-2 gap-5">
+
+        <!-- Kode -->
+        <div>
+          <label for="code" class="block text-sm font-medium text-slate-300 mb-1">Kode Film <span class="text-rose-400">*</span></label>
+          <input id="code" type="text" autocomplete="off" placeholder="Contoh: ABC 123"
+                 class="w-full rounded-lg border border-slate-700 bg-slate-800 text-slate-100 placeholder-slate-500 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400" />
+          <p id="codeError" class="text-xs text-rose-400 mt-1 hidden">Kode film wajib diisi.</p>
+        </div>
+
+        <!-- Kategori -->
+        <fieldset>
+          <legend class="block text-sm font-medium text-slate-300 mb-1">Kategori <span class="text-slate-500 font-normal">(boleh lebih dari satu)</span></legend>
+          <div id="categoryGroup" class="grid grid-cols-2 gap-2"></div>
+        </fieldset>
+
+        <!-- Rating -->
+        <div>
+          <label for="rating" class="block text-sm font-medium text-slate-300 mb-1">Rating Pribadi</label>
+          <div class="flex items-center gap-3">
+            <input id="rating" type="range" min="1" max="5" step="0.5" value="3" class="flex-1" />
+            <span id="ratingValue" class="w-10 text-center font-semibold text-amber-400">3.0</span>
+          </div>
+          <div id="ratingPreview" class="mt-2 flex items-center gap-2 min-h-[28px]"></div>
+
+          <div class="mt-3 flex flex-col gap-3">
+            <label class="flex items-center gap-3 cursor-pointer select-none">
+              <span class="switch">
+                <input id="hot" type="checkbox" />
+                <span class="track"></span>
+                <span class="knob"></span>
+              </span>
+              <span class="text-sm font-medium text-slate-300">🔥 Sangat Bagus (Tanpa Ragu)</span>
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer select-none text-sm text-slate-400">
+              <input id="unrated" type="checkbox" class="w-4 h-4 rounded border-slate-600 bg-slate-800 accent-indigo-500" />
+              Belum dinilai (rating 0)
+            </label>
+          </div>
+        </div>
+
+        <!-- Artis -->
+        <div>
+          <label for="artistInput" class="block text-sm font-medium text-slate-300 mb-1">
+            Artis (Pemain) <span id="artistCount" class="text-slate-500 font-normal">0/12</span>
+          </label>
+          <div class="relative">
+            <div id="tagWrap" class="tag-wrap flex flex-wrap items-center gap-2 rounded-lg border border-slate-700 px-2 py-2 bg-slate-800 cursor-text">
+              <div id="tagList" class="contents"></div>
+              <input id="artistInput" type="text" autocomplete="off" autocapitalize="words" role="combobox"
+                     aria-autocomplete="list" aria-expanded="false" aria-controls="suggestions"
+                     placeholder="Ketik nama lalu Enter / koma"
+                     class="flex-1 min-w-[140px] px-1 py-0.5 outline-none bg-transparent capitalize text-slate-100 placeholder-slate-500" />
+            </div>
+            <ul id="suggestions" role="listbox"
+                class="hidden absolute left-0 right-0 top-full mt-1 z-20 max-h-56 overflow-y-auto bg-slate-800 border border-slate-700 rounded-lg shadow-2xl py-1"></ul>
+          </div>
+          <p id="artistMsg" class="text-xs mt-1 text-slate-500">Enter atau koma untuk menambah. Maksimal 12 artis.</p>
+        </div>
+
+        <div class="md:col-span-2 flex flex-col sm:flex-row sm:items-center gap-3">
+          <button type="submit" id="submitBtn"
+                  class="inline-flex justify-center items-center rounded-lg bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed text-white font-medium px-6 py-2.5 transition">
+            Simpan
+          </button>
+          <button type="button" id="cancelEdit"
+                  class="hidden inline-flex justify-center items-center rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium px-6 py-2.5 transition">
+            Batal
+          </button>
+          <span id="saveMsg" class="text-sm text-emerald-400 hidden"></span>
+        </div>
+      </form>
+    </section>
+
+    <!-- OUTPUT -->
+    <section>
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+        <h2 class="text-xl font-semibold text-white">Daftar Film <span id="summary" class="text-sm font-normal text-slate-400"></span></h2>
+        <input id="search" type="search" placeholder="Cari kode, artis, atau kategori…"
+               class="w-full sm:w-72 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 placeholder-slate-500 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400" />
+      </div>
+      <div id="output" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+      <p id="emptyState" class="hidden text-center text-slate-500 py-12">Belum ada data. Tambahkan film pertamamu atau gunakan Impor Catatan.</p>
+    </section>
+  </div>
+
+  <!-- MODAL IMPOR -->
+  <div id="importModal" class="hidden fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="importTitle">
+    <div id="importBackdrop" class="absolute inset-0 bg-black/70 backdrop-blur-sm"></div>
+    <div class="relative w-full sm:max-w-xl max-h-[92vh] overflow-y-auto bg-slate-900 border border-slate-700 rounded-t-2xl sm:rounded-2xl shadow-2xl p-5">
+      <div class="flex items-start justify-between gap-3 mb-3">
+        <div>
+          <h3 id="importTitle" class="text-lg font-semibold text-white">Impor Catatan</h3>
+          <p class="text-xs text-slate-400 mt-1">Satu film per baris. Format: <code class="bg-slate-800 px-1.5 py-0.5 rounded text-indigo-300">KODE - ARTIS 1, ARTIS 2</code>. Akhiran <code class="bg-slate-800 px-1.5 py-0.5 rounded text-emerald-300">-RM</code> (Reduce Mosaic), <code class="bg-slate-800 px-1.5 py-0.5 rounded text-sky-300">-S</code> (Subtitle), dan <code class="bg-slate-800 px-1.5 py-0.5 rounded text-violet-300">-UC</code> (Uncensored) otomatis dihapus dan dicentang sebagai kategori.</p>
+        </div>
+        <button type="button" id="closeImport" class="text-slate-400 hover:text-white text-2xl leading-none" aria-label="Tutup">&times;</button>
+      </div>
+
+      <textarea id="importText" rows="9" spellcheck="false"
+                placeholder="JUL 774 - HONOKA YONEKURA-RM&#10;ABC 123 - ARTIS SATU, ARTIS DUA"
+                class="w-full rounded-lg border border-slate-700 bg-slate-800 text-slate-100 placeholder-slate-500 px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400"></textarea>
+
+      <label class="mt-3 flex items-start gap-2 text-sm text-slate-300 cursor-pointer select-none">
+        <input id="importOverwrite" type="checkbox" class="mt-0.5 w-4 h-4 rounded border-slate-600 bg-slate-800 accent-indigo-500" />
+        <span>Timpa data jika kode sudah ada <span class="text-slate-500">(rating dan kategori lama akan diganti). Jika tidak dicentang, kode yang sudah ada dilewati.</span></span>
+      </label>
+
+      <div id="importResult" class="hidden mt-3 rounded-lg border border-slate-700 bg-slate-800/60 text-sm px-3 py-2 space-y-1"></div>
+
+      <div class="mt-4 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+        <button type="button" id="cancelImport" class="rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium px-5 py-2.5 transition">Tutup</button>
+        <button type="button" id="runImport" class="rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed text-white font-medium px-5 py-2.5 transition">Impor</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      /* =========================================================
+         SUPABASE
+      ========================================================= */
+      const SUPABASE_URL = 'https://yqmmsdlqiacaikfzcivf.supabase.co';
+      const SUPABASE_KEY = 'sb_publishable_kRwzvXuWRs0T9xUn4KuqzQ_mYkPLuAq';
+      const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+      const TABLE = 'movies';
+      const PAGE_SIZE = 1000;   // batas baris per permintaan Supabase
+      const WRITE_CHUNK = 500;  // jumlah baris per upsert
+      const DELETE_CHUNK = 100; // jumlah kode per delete
+
+      /* =========================================================
+         KONSTANTA & STATE
+      ========================================================= */
+      const MOVIES_KEY = 'movieHistory';           // hanya dipakai untuk migrasi data lama
+      const MIGRATED_KEY = 'movieHistoryMigrated';
+      const MAX_ARTISTS = 12;
+      const MAX_SUGGESTIONS = 8;
+      const STAR_PATH = 'M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z';
+
+      const CATEGORIES = [
+        { name: 'Subtitle',      badge: 'bg-sky-500/15 text-sky-300 ring-sky-400/40',             pill: 'peer-checked:bg-sky-500/15 peer-checked:border-sky-400 peer-checked:text-sky-200' },
+        { name: 'Non Subtitle',  badge: 'bg-rose-500/15 text-rose-300 ring-rose-400/40',          pill: 'peer-checked:bg-rose-500/15 peer-checked:border-rose-400 peer-checked:text-rose-200' },
+        { name: 'Reduce Mosaic', badge: 'bg-emerald-500/15 text-emerald-300 ring-emerald-400/40', pill: 'peer-checked:bg-emerald-500/15 peer-checked:border-emerald-400 peer-checked:text-emerald-200' },
+        { name: 'Uncensored',    badge: 'bg-violet-500/15 text-violet-300 ring-violet-400/40',    pill: 'peer-checked:bg-violet-500/15 peer-checked:border-violet-400 peer-checked:text-violet-200' }
+      ];
+
+      const $ = (id) => document.getElementById(id);
+      const form = $('movieForm'), codeEl = $('code'), codeError = $('codeError');
+      const categoryGroup = $('categoryGroup');
+      const ratingEl = $('rating'), ratingValueEl = $('ratingValue'), ratingPreview = $('ratingPreview');
+      const hotEl = $('hot'), unratedEl = $('unrated');
+      const tagWrap = $('tagWrap'), tagList = $('tagList'), artistInput = $('artistInput');
+      const artistCount = $('artistCount'), artistMsg = $('artistMsg'), suggestionsEl = $('suggestions');
+      const saveMsg = $('saveMsg'), submitBtn = $('submitBtn'), cancelEditBtn = $('cancelEdit');
+      const formTitle = $('formTitle'), editBanner = $('editBanner'), editBannerCode = $('editBannerCode');
+      const output = $('output'), emptyState = $('emptyState'), summary = $('summary'), searchEl = $('search');
+      const importModal = $('importModal'), importText = $('importText'), importOverwrite = $('importOverwrite');
+      const importResult = $('importResult'), runImportBtn = $('runImport');
+      const dbBanner = $('dbBanner'), migrateBanner = $('migrateBanner'), migrateCount = $('migrateCount'), migrateBtn = $('migrateBtn');
+
+      let tags = [];
+      let editingKey = null;      // kunci (kode ter-normalisasi) data yang sedang diedit
+      let uid = 0;
+      let msgTimer = null;
+      let suggestionItems = [];
+      let activeIndex = -1;
+      let moviesCache = [];       // salinan data dari Supabase (sumber kebenaran tetap di database)
+      let hasLoadedOnce = false;
+      let saving = false;
+
+      /* =========================================================
+         UTILITAS
+      ========================================================= */
+      function escapeHTML(str) {
+        return String(str).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+      }
+
+      // Title Case: huruf pertama setiap kata menjadi kapital
+      function toTitleCase(str) {
+        return String(str).replace(/\s+/g, ' ').trim().toLowerCase()
+          .replace(/(^|[\s\-'’.])([a-zà-ÿ])/g, (m, sep, ch) => sep + ch.toUpperCase());
+      }
+
+      function normalizeCode(str) { return String(str || '').replace(/\s+/g, ' ').trim(); }
+      function codeKey(str) { return normalizeCode(str).toUpperCase(); }   // Primary Key (tidak peka huruf besar/kecil)
+
+      function readLocalJSON(key) {
+        try {
+          const v = JSON.parse(localStorage.getItem(key));
+          return Array.isArray(v) ? v : [];
+        } catch (e) { return []; }
+      }
+
+      function errText(err) {
+        return (err && (err.message || err.details)) ? (err.message || err.details) : String(err);
+      }
+      function showDbError(err, prefix) {
+        dbBanner.textContent = (prefix || 'Gagal berkomunikasi dengan Supabase') + ': ' + errText(err);
+        dbBanner.classList.remove('hidden');
+        console.error(err);
+      }
+      function hideDbError() { dbBanner.classList.add('hidden'); dbBanner.textContent = ''; }
+
+      /* =========================================================
+         MANAJEMEN DATA (Supabase, Primary Key = kolom "code")
+      ========================================================= */
+      function normalizeRow(m) {
+        const code = normalizeCode(m && m.code);
+        if (!code) return null;
+        return {
+          code: code,
+          categories: Array.isArray(m.categories) ? m.categories : (m.category ? [m.category] : []),
+          rating: Number(m.rating) || 0,
+          hot: !!m.hot,
+          artists: Array.isArray(m.artists) ? m.artists.map(toTitleCase).filter(Boolean) : []
+        };
+      }
+
+      // Ambil semua baris (dengan paginasi, karena Supabase membatasi 1000 baris per permintaan)
+      async function fetchMovies() {
+        const rows = [];
+        for (let from = 0; ; from += PAGE_SIZE) {
+          const { data, error } = await supabaseClient
+            .from(TABLE)
+            .select('code, categories, rating, hot, artists')
+            .order('code', { ascending: true })
+            .range(from, from + PAGE_SIZE - 1);
+          if (error) throw error;
+          rows.push(...(data || []));
+          if (!data || data.length < PAGE_SIZE) break;
+        }
+        const map = new Map();
+        rows.forEach((r) => {
+          const row = normalizeRow(r);
+          if (row) map.set(codeKey(row.code), row);
+        });
+        moviesCache = Array.from(map.values());
+        return moviesCache;
+      }
+
+      async function upsertMovies(list) {
+        const rows = list.map((m) => ({
+          code: m.code,
+          categories: m.categories,
+          rating: m.rating,
+          hot: m.hot,
+          artists: m.artists
+        }));
+        for (let i = 0; i < rows.length; i += WRITE_CHUNK) {
+          const { error } = await supabaseClient
+            .from(TABLE)
+            .upsert(rows.slice(i, i + WRITE_CHUNK), { onConflict: 'code' });
+          if (error) throw error;
+        }
+      }
+
+      async function deleteMovies(codes) {
+        for (let i = 0; i < codes.length; i += DELETE_CHUNK) {
+          const { error } = await supabaseClient
+            .from(TABLE)
+            .delete()
+            .in('code', codes.slice(i, i + DELETE_CHUNK));
+          if (error) throw error;
+        }
+      }
+
+      // Daftar artis untuk autocomplete: diturunkan dari data film di cache
+      function loadArtistList() {
+        const seen = new Set();
+        const all = [];
+        moviesCache.forEach((m) => m.artists.forEach((a) => {
+          const k = a.toLowerCase();
+          if (!seen.has(k)) { seen.add(k); all.push(a); }
+        }));
+        return all.sort((a, b) => a.localeCompare(b, 'id', { sensitivity: 'base' }));
+      }
+
+      /* =========================================================
+         KATEGORI (CHECKBOX)
+      ========================================================= */
+      function renderCategoryInputs() {
+        categoryGroup.innerHTML = CATEGORIES.map((c, i) =>
+          '<label class="relative cursor-pointer select-none">' +
+            '<input type="checkbox" name="category" value="' + escapeHTML(c.name) + '" class="peer sr-only" />' +
+            '<span class="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-400 transition hover:border-slate-500 ' + c.pill +
+              ' peer-focus-visible:ring-2 peer-focus-visible:ring-indigo-400">' +
+              '<span data-tick class="w-4 h-4 rounded border border-slate-500 bg-slate-900 flex items-center justify-center text-[10px] leading-none text-transparent">✓</span>' +
+              escapeHTML(c.name) +
+            '</span>' +
+          '</label>'
+        ).join('');
+      }
+      function selectedCategories() {
+        return Array.from(categoryGroup.querySelectorAll('input:checked')).map((i) => i.value);
+      }
+      function setCategories(list) {
+        categoryGroup.querySelectorAll('input').forEach((inp) => { inp.checked = list.includes(inp.value); });
+        syncCategoryTicks();
+      }
+      function syncCategoryTicks() {
+        categoryGroup.querySelectorAll('input').forEach((inp) => {
+          const tick = inp.parentElement.querySelector('[data-tick]');
+          tick.classList.toggle('text-transparent', !inp.checked);
+          tick.classList.toggle('text-white', inp.checked);
+          tick.classList.toggle('bg-indigo-500', inp.checked);
+          tick.classList.toggle('border-indigo-400', inp.checked);
+        });
+      }
+      categoryGroup.addEventListener('change', syncCategoryTicks);
+
+      /* =========================================================
+         RATING BINTANG (SVG inline)
+      ========================================================= */
+      function starSVG(type, size) {
+        const cls = 'w-' + size + ' h-' + size;
+        if (type === 'full') {
+          return '<svg class="' + cls + '" viewBox="0 0 24 24" fill="#fbbf24" aria-hidden="true"><path d="' + STAR_PATH + '"/></svg>';
+        }
+        if (type === 'half') {
+          const id = 'half-' + (++uid);
+          return '<svg class="' + cls + '" viewBox="0 0 24 24" aria-hidden="true">' +
+            '<defs><clipPath id="' + id + '"><rect x="0" y="0" width="12" height="24"/></clipPath></defs>' +
+            '<path d="' + STAR_PATH + '" fill="#334155"/>' +
+            '<path d="' + STAR_PATH + '" fill="#fbbf24" clip-path="url(#' + id + ')"/></svg>';
+        }
+        return '<svg class="' + cls + '" viewBox="0 0 24 24" fill="#334155" aria-hidden="true"><path d="' + STAR_PATH + '"/></svg>';
+      }
+
+      // Angka desimal -> bintang penuh / setengah / kosong (selalu total 5)
+      function renderStars(rating, size) {
+        size = size || 4;
+        let r = Math.round(Number(rating) * 2) / 2;
+        if (isNaN(r)) r = 0;
+        r = Math.max(0, Math.min(5, r));
+        const full = Math.floor(r);
+        const hasHalf = (r - full) >= 0.5;
+        const empty = 5 - full - (hasHalf ? 1 : 0);
+        let html = '';
+        for (let i = 0; i < full; i++) html += starSVG('full', size);
+        if (hasHalf) html += starSVG('half', size);
+        for (let i = 0; i < empty; i++) html += starSVG('empty', size);
+        return '<span class="inline-flex items-center" role="img" aria-label="Rating ' + r.toFixed(1) + ' dari 5">' + html + '</span>';
+      }
+
+      function renderRating(rating, hot, size) {
+        return '<span class="inline-flex items-center gap-1.5">' + renderStars(rating, size) +
+          (hot ? '<span class="fire" title="Sangat Bagus (Tanpa Ragu)" aria-label="Sangat Bagus">🔥</span>' : '') +
+          '</span>';
+      }
+
+      function currentRating() { return unratedEl.checked ? 0 : parseFloat(ratingEl.value); }
+
+      function updateRatingUI() {
+        ratingEl.disabled = unratedEl.checked;
+        const v = currentRating();
+        ratingValueEl.textContent = v > 0 ? v.toFixed(1) : '–';
+        ratingPreview.innerHTML = renderRating(v, hotEl.checked, 6);
+      }
+
+      /* =========================================================
+         TAGS ARTIS + AUTOCOMPLETE
+      ========================================================= */
+      function renderTags() {
+        tagList.innerHTML = tags.map((t, i) =>
+          '<span class="inline-flex items-center gap-1 bg-indigo-500/20 text-indigo-200 ring-1 ring-inset ring-indigo-400/30 text-sm font-medium rounded-full pl-3 pr-1.5 py-1 fade-in">' +
+            escapeHTML(t) +
+            '<button type="button" data-remove="' + i + '" class="w-5 h-5 rounded-full hover:bg-indigo-400/30 text-indigo-300 leading-none flex items-center justify-center" aria-label="Hapus ' + escapeHTML(t) + '">&times;</button>' +
+          '</span>'
+        ).join('');
+        artistCount.textContent = tags.length + '/' + MAX_ARTISTS;
+        const full = tags.length >= MAX_ARTISTS;
+        artistInput.disabled = full;
+        artistInput.placeholder = full ? 'Batas maksimal tercapai' : 'Ketik nama lalu Enter / koma';
+        if (full) hideSuggestions();
+      }
+
+      function setArtistMsg(text, isError) {
+        artistMsg.textContent = text;
+        artistMsg.className = 'text-xs mt-1 ' + (isError ? 'text-rose-400' : 'text-slate-500');
+      }
+      function resetArtistMsg() { setArtistMsg('Enter atau koma untuk menambah. Maksimal ' + MAX_ARTISTS + ' artis.', false); }
+
+      function addTag(raw) {
+        const name = toTitleCase(raw);
+        if (!name) return false;
+        if (tags.length >= MAX_ARTISTS) {
+          setArtistMsg('Maksimal ' + MAX_ARTISTS + ' artis per entri.', true);
+          return false;
+        }
+        if (tags.some((t) => t.toLowerCase() === name.toLowerCase())) {
+          setArtistMsg('Artis "' + name + '" sudah ditambahkan.', true);
+          return false;
+        }
+        tags.push(name);
+        resetArtistMsg();
+        renderTags();
+        return true;
+      }
+
+      function hideSuggestions() {
+        suggestionsEl.classList.add('hidden');
+        suggestionsEl.innerHTML = '';
+        suggestionItems = [];
+        activeIndex = -1;
+        artistInput.setAttribute('aria-expanded', 'false');
+      }
+
+      function highlight(name, q) {
+        const idx = name.toLowerCase().indexOf(q.toLowerCase());
+        if (idx < 0) return escapeHTML(name);
+        return escapeHTML(name.slice(0, idx)) +
+          '<strong class="text-indigo-300">' + escapeHTML(name.slice(idx, idx + q.length)) + '</strong>' +
+          escapeHTML(name.slice(idx + q.length));
+      }
+
+      function showSuggestions() {
+        const q = artistInput.value.replace(/,/g, '').trim();
+        if (!q || artistInput.disabled) { hideSuggestions(); return; }
+        const ql = q.toLowerCase();
+        const taken = new Set(tags.map((t) => t.toLowerCase()));
+        const matches = loadArtistList()
+          .filter((a) => !taken.has(a.toLowerCase()) && a.toLowerCase().includes(ql))
+          .sort((a, b) => {
+            const as = a.toLowerCase().startsWith(ql) ? 0 : 1;
+            const bs = b.toLowerCase().startsWith(ql) ? 0 : 1;
+            return as - bs || a.localeCompare(b, 'id', { sensitivity: 'base' });
+          })
+          .slice(0, MAX_SUGGESTIONS);
+
+        if (!matches.length) { hideSuggestions(); return; }
+        suggestionItems = matches;
+        activeIndex = -1;
+        suggestionsEl.innerHTML = matches.map((m, i) =>
+          '<li role="option" data-index="' + i + '" class="px-3 py-2 text-sm cursor-pointer text-slate-300 hover:bg-slate-700">' + highlight(m, q) + '</li>'
+        ).join('');
+        suggestionsEl.classList.remove('hidden');
+        artistInput.setAttribute('aria-expanded', 'true');
+      }
+
+      function setActive(i) {
+        suggestionsEl.querySelectorAll('li').forEach((li, idx) => {
+          const on = idx === i;
+          li.classList.toggle('bg-slate-700', on);
+          if (on) li.scrollIntoView({ block: 'nearest' });
+        });
+        activeIndex = i;
+      }
+
+      function chooseSuggestion(i) {
+        const name = suggestionItems[i];
+        if (name === undefined) return;
+        if (addTag(name)) artistInput.value = '';
+        hideSuggestions();
+        artistInput.focus();
+      }
+
+      suggestionsEl.addEventListener('mousedown', (e) => {
+        e.preventDefault(); // cegah blur pada input
+        const li = e.target.closest('li[data-index]');
+        if (li) chooseSuggestion(Number(li.dataset.index));
+      });
+
+      artistInput.addEventListener('keydown', (e) => {
+        const open = !suggestionsEl.classList.contains('hidden') && suggestionItems.length > 0;
+        if (e.key === 'ArrowDown' && open) {
+          e.preventDefault();
+          setActive((activeIndex + 1) % suggestionItems.length);
+        } else if (e.key === 'ArrowUp' && open) {
+          e.preventDefault();
+          setActive(activeIndex <= 0 ? suggestionItems.length - 1 : activeIndex - 1);
+        } else if (e.key === 'Escape') {
+          hideSuggestions();
+        } else if (e.key === 'Enter' || e.key === ',') {
+          e.preventDefault();
+          if (e.key === 'Enter' && open && activeIndex >= 0) {
+            chooseSuggestion(activeIndex);
+          } else {
+            if (addTag(artistInput.value)) artistInput.value = '';
+            hideSuggestions();
+          }
+        } else if (e.key === 'Backspace' && artistInput.value === '' && tags.length) {
+          tags.pop();
+          renderTags();
+        }
+      });
+
+      artistInput.addEventListener('input', () => {
+        if (artistInput.value.includes(',')) {          // keyboard mobile / paste
+          const parts = artistInput.value.split(',');
+          const rest = parts.pop();
+          parts.forEach(addTag);
+          artistInput.value = rest;
+        }
+        showSuggestions();
+      });
+      artistInput.addEventListener('focus', showSuggestions);
+      artistInput.addEventListener('blur', () => {
+        if (artistInput.value.trim() && addTag(artistInput.value)) artistInput.value = '';
+        hideSuggestions();
+      });
+
+      tagWrap.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-remove]');
+        if (btn) {
+          tags.splice(Number(btn.dataset.remove), 1);
+          resetArtistMsg();
+          renderTags();
+        }
+        if (!artistInput.disabled) artistInput.focus();
+      });
+
+      /* =========================================================
+         RENDER OUTPUT (urut A-Z berdasarkan Kode Film)
+         render()      -> ambil data terbaru dari Supabase, lalu gambar ulang
+         render(false) -> gambar ulang dari cache (dipakai pencarian/edit, tanpa permintaan jaringan)
+      ========================================================= */
+      async function render(refetch) {
+        if (refetch !== false) {
+          if (!hasLoadedOnce) {
+            output.innerHTML = '<p class="col-span-full text-center text-slate-500 py-12">Memuat data dari Supabase…</p>';
+            emptyState.classList.add('hidden');
+          }
+          try {
+            await fetchMovies();
+            hasLoadedOnce = true;
+            hideDbError();
+          } catch (err) {
+            showDbError(err, 'Gagal memuat data dari Supabase');
+            if (!hasLoadedOnce) {
+              output.innerHTML = '';
+              emptyState.classList.add('hidden');
+              summary.textContent = '';
+              return;
+            }
+          }
+        }
+
+        const data = moviesCache.slice();
+        data.sort((a, b) => a.code.localeCompare(b.code, 'id', { numeric: true, sensitivity: 'base' }));
+
+        const q = searchEl.value.trim().toLowerCase();
+        const list = q
+          ? data.filter((m) =>
+              m.code.toLowerCase().includes(q) ||
+              m.artists.some((a) => a.toLowerCase().includes(q)) ||
+              m.categories.some((c) => c.toLowerCase().includes(q)))
+          : data;
+
+        summary.textContent = data.length ? '(' + (q ? list.length + ' dari ' : '') + data.length + ' film)' : '';
+        emptyState.classList.toggle('hidden', data.length > 0);
+
+        if (data.length && !list.length) {
+          output.innerHTML = '<p class="col-span-full text-center text-slate-500 py-12">Tidak ada hasil yang cocok.</p>';
+          return;
+        }
+
+        output.innerHTML = list.map((m) => {
+          const key = codeKey(m.code);
+          const isEditing = editingKey === key;
+
+          const artistTags = m.artists.length
+            ? m.artists.map((a) => '<span class="bg-indigo-500/15 text-indigo-200 ring-1 ring-inset ring-indigo-400/25 text-xs font-medium rounded-full px-2.5 py-1">' + escapeHTML(a) + '</span>').join('')
+            : '<span class="text-xs text-slate-500 italic">Tanpa artis</span>';
+
+          const catBadges = m.categories.length
+            ? m.categories.map((name) => {
+                const c = CATEGORIES.find((x) => x.name === name);
+                const style = c ? c.badge : 'bg-slate-500/15 text-slate-300 ring-slate-400/40';
+                return '<span class="text-xs font-medium px-2 py-0.5 rounded-full ring-1 ring-inset ' + style + '">' + escapeHTML(name) + '</span>';
+              }).join('')
+            : '<span class="text-xs text-slate-500 italic">Tanpa kategori</span>';
+
+          const border = isEditing ? 'border-amber-400 ring-2 ring-amber-400/40'
+                       : m.hot ? 'border-orange-500/50 ring-1 ring-orange-500/30'
+                       : 'border-slate-800';
+
+          return '<article class="bg-slate-900 rounded-2xl border ' + border + ' shadow-lg overflow-hidden fade-in flex flex-col">' +
+            '<header class="bg-gradient-to-r from-indigo-600/80 to-violet-700/80 px-4 py-3">' +
+              '<h3 class="font-mono font-bold text-white break-all">' + escapeHTML(m.code) + '</h3>' +
+            '</header>' +
+            '<div class="p-4 flex flex-col gap-3 flex-1">' +
+              '<div class="flex flex-wrap gap-1.5">' + artistTags + '</div>' +
+              '<div class="flex flex-wrap gap-1.5">' + catBadges + '</div>' +
+              '<div class="mt-auto pt-3 border-t border-slate-800 flex items-center justify-between gap-2">' +
+                renderRating(m.rating, m.hot, 5) +
+                '<span class="text-sm font-semibold ' + (m.rating > 0 ? 'text-slate-300' : 'text-slate-500 text-xs font-normal') + '">' + (m.rating > 0 ? m.rating.toFixed(1) : 'Belum dinilai') + '</span>' +
+              '</div>' +
+              '<div class="flex items-center justify-between gap-2">' +
+                '<button type="button" data-edit="' + escapeHTML(key) + '" class="inline-flex items-center gap-1.5 rounded-lg bg-slate-800 hover:bg-indigo-600 text-slate-200 hover:text-white text-sm font-medium px-3 py-1.5 transition">' +
+                  '<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>Edit' +
+                '</button>' +
+                '<button type="button" data-delete="' + escapeHTML(key) + '" class="text-xs text-slate-500 hover:text-rose-400 transition px-2 py-1.5">Hapus</button>' +
+              '</div>' +
+            '</div>' +
+          '</article>';
+        }).join('');
+      }
+
+      output.addEventListener('click', async (e) => {
+        const editBtn = e.target.closest('[data-edit]');
+        if (editBtn) { startEdit(editBtn.dataset.edit); return; }
+
+        const delBtn = e.target.closest('[data-delete]');
+        if (delBtn) {
+          const key = delBtn.dataset.delete;
+          const target = moviesCache.find((m) => codeKey(m.code) === key);
+          if (!target) return;
+          if (!confirm('Hapus film ini dari histori?')) return;
+
+          delBtn.disabled = true;
+          delBtn.textContent = 'Menghapus…';
+          try {
+            await deleteMovies([target.code]);
+            hideDbError();
+          } catch (err) {
+            showDbError(err, 'Gagal menghapus data');
+            delBtn.disabled = false;
+            delBtn.textContent = 'Hapus';
+            return;
+          }
+          if (editingKey === key) resetForm();
+          await render();
+        }
+      });
+      searchEl.addEventListener('input', () => render(false));
+
+      /* =========================================================
+         FORM: SIMPAN / EDIT / UPDATE
+      ========================================================= */
+      function flashMessage(text, isError) {
+        saveMsg.textContent = (isError ? '✖ ' : '✔ ') + text;
+        saveMsg.classList.toggle('text-emerald-400', !isError);
+        saveMsg.classList.toggle('text-rose-400', !!isError);
+        saveMsg.classList.remove('hidden');
+        clearTimeout(msgTimer);
+        msgTimer = setTimeout(() => saveMsg.classList.add('hidden'), isError ? 5000 : 2800);
+      }
+
+      function setEditMode(on, code) {
+        formTitle.textContent = on ? 'Edit Film' : 'Tambah Film';
+        submitBtn.textContent = on ? 'Update Data' : 'Simpan';
+        cancelEditBtn.classList.toggle('hidden', !on);
+        editBanner.classList.toggle('hidden', !on);
+        editBannerCode.textContent = on ? code : '';
+      }
+
+      function setSaving(on) {
+        saving = on;
+        submitBtn.disabled = on;
+        submitBtn.textContent = on ? 'Menyimpan…' : (editingKey !== null ? 'Update Data' : 'Simpan');
+      }
+
+      function resetForm() {
+        form.reset();
+        tags = [];
+        editingKey = null;
+        artistInput.value = '';
+        codeError.classList.add('hidden');
+        codeEl.classList.remove('border-rose-400');
+        setCategories([]);
+        resetArtistMsg();
+        setEditMode(false);
+        renderTags();
+        updateRatingUI();
+        hideSuggestions();
+      }
+
+      function startEdit(key) {
+        const movie = moviesCache.find((m) => codeKey(m.code) === key);
+        if (!movie) return;
+
+        editingKey = key;
+        codeEl.value = movie.code;
+        setCategories(movie.categories);
+        hotEl.checked = movie.hot;
+        unratedEl.checked = movie.rating <= 0;
+        ratingEl.value = movie.rating > 0 ? movie.rating : 3;
+        tags = movie.artists.slice(0, MAX_ARTISTS);
+        artistInput.value = '';
+        codeError.classList.add('hidden');
+        resetArtistMsg();
+        setEditMode(true, movie.code);
+        renderTags();
+        updateRatingUI();
+        render(false);
+
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        setTimeout(() => codeEl.focus({ preventScroll: true }), 350);
+      }
+
+      ratingEl.addEventListener('input', updateRatingUI);
+      hotEl.addEventListener('change', updateRatingUI);
+      unratedEl.addEventListener('change', updateRatingUI);
+      cancelEditBtn.addEventListener('click', () => { resetForm(); render(false); });
+
+      codeEl.addEventListener('input', () => {
+        if (codeEl.value.trim()) {
+          codeError.classList.add('hidden');
+          codeEl.classList.remove('border-rose-400');
+        }
+      });
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (saving) return;
+
+        if (artistInput.value.trim() && addTag(artistInput.value)) artistInput.value = '';
+        hideSuggestions();
+
+        const code = normalizeCode(codeEl.value);
+        if (!code) {
+          codeError.classList.remove('hidden');
+          codeEl.classList.add('border-rose-400');
+          codeEl.focus();
+          return;
+        }
+
+        const key = codeKey(code);
+        const isEdit = editingKey !== null;
+        const collides = moviesCache.some((m) => codeKey(m.code) === key);
+
+        // Kode sudah dipakai entri lain (bukan entri yang sedang diedit)
+        if (collides && (!isEdit || editingKey !== key)) {
+          if (!confirm('Kode "' + code + '" sudah ada. Timpa data lama?')) return;
+        }
+
+        const entry = {
+          code: code,
+          categories: selectedCategories(),
+          rating: currentRating(),
+          hot: hotEl.checked,
+          artists: tags.slice(0, MAX_ARTISTS)
+        };
+
+        // Baris lama yang harus dibuang: kode lama saat edit (jika kode diubah),
+        // atau baris dengan kode sama tetapi beda huruf besar/kecil.
+        const staleCodes = moviesCache
+          .filter((m) => {
+            const k = codeKey(m.code);
+            return (k === key || (isEdit && k === editingKey)) && m.code !== code;
+          })
+          .map((m) => m.code);
+
+        setSaving(true);
+        try {
+          await upsertMovies([entry]);
+          if (staleCodes.length) await deleteMovies(staleCodes);
+          hideDbError();
+        } catch (err) {
+          setSaving(false);
+          showDbError(err, 'Gagal menyimpan data');
+          flashMessage('Gagal menyimpan. Data belum tersimpan.', true);
+          return;
+        }
+        setSaving(false);
+
+        resetForm();
+        await render();
+        flashMessage(isEdit ? 'Data berhasil diperbarui.' : 'Data berhasil disimpan.');
+        if (!isEdit) codeEl.focus();
+      });
+
+      /* =========================================================
+         IMPOR MASSAL
+      ========================================================= */
+      // Parsing satu baris. Return { ok, code, categories, artists, truncated } atau { ok:false, reason }
+      function parseImportLine(line) {
+        const text = line.trim();
+        const sep = /\s-\s/.exec(text);                       // " - " PERTAMA
+        if (!sep) return { ok: false, reason: 'pemisah " - " tidak ditemukan' };
+
+        const code = normalizeCode(text.slice(0, sep.index));  // kiri = Kode Film
+        let right = text.slice(sep.index + sep[0].length).trim();
+        if (!code) return { ok: false, reason: 'kode film kosong' };
+
+        // Akhiran kategori (case-insensitive): -RM, -S, -UC. Boleh bertumpuk, mis. "NAMA-RM-S".
+        const SUFFIX_MAP = { RM: 'Reduce Mosaic', S: 'Subtitle', UC: 'Uncensored' };
+        const categories = [];
+        let m;
+        while ((m = /\s*-(RM|UC|S)\s*$/i.exec(right))) {
+          const cat = SUFFIX_MAP[m[1].toUpperCase()];
+          if (!categories.includes(cat)) categories.push(cat);
+          right = right.slice(0, m.index);
+        }
+        categories.sort((a, b) => CATEGORIES.findIndex((c) => c.name === a) - CATEGORIES.findIndex((c) => c.name === b));
+
+        const seen = new Set();
+        let artists = right.split(',')
+          .map(toTitleCase)
+          .filter((a) => {
+            if (!a) return false;
+            const k = a.toLowerCase();
+            if (seen.has(k)) return false;
+            seen.add(k);
+            return true;
+          });
+
+        const truncated = artists.length > MAX_ARTISTS;
+        if (truncated) artists = artists.slice(0, MAX_ARTISTS);
+
+        return { ok: true, code: code, categories: categories, artists: artists, truncated: truncated };
+      }
+
+      async function runImport() {
+        const lines = importText.value.split(/\r?\n/).filter((l) => l.trim() !== '');
+        if (!lines.length) { showImportResult('<p class="text-amber-300">Textarea masih kosong.</p>'); return; }
+
+        runImportBtn.disabled = true;
+        runImportBtn.textContent = 'Mengimpor…';
+
+        try {
+          // Sinkronkan cache dulu agar deteksi kode yang sudah ada akurat
+          await fetchMovies();
+
+          const overwrite = importOverwrite.checked;
+          const working = new Map(moviesCache.map((m) => [codeKey(m.code), m]));  // keadaan data setelah impor
+          const upserts = new Map();     // key -> entry yang ditulis ke Supabase
+          const staleCodes = new Set();  // kode lama (beda huruf besar/kecil) yang harus dihapus
+          let added = 0, updated = 0, skipped = 0, trimmed = 0;
+          const invalid = [];
+
+          lines.forEach((line, n) => {
+            const p = parseImportLine(line);
+            if (!p.ok) { invalid.push('Baris ' + (n + 1) + ': ' + p.reason); return; }
+
+            const key = codeKey(p.code);
+            const entry = { code: p.code, categories: p.categories, rating: 0, hot: false, artists: p.artists };
+            const existing = working.get(key);
+
+            if (existing) {
+              if (!overwrite) { skipped++; return; }
+              if (existing.code !== p.code) staleCodes.add(existing.code);
+              updated++;
+            } else {
+              added++;
+            }
+            working.set(key, entry);
+            upserts.set(key, entry);
+            if (p.truncated) trimmed++;
+          });
+
+          if (upserts.size) await upsertMovies(Array.from(upserts.values()));
+          const toDelete = Array.from(staleCodes).filter((c) => !Array.from(upserts.values()).some((u) => u.code === c));
+          if (toDelete.length) await deleteMovies(toDelete);
+
+          hideDbError();
+          if (editingKey !== null && !working.has(editingKey)) resetForm();
+          await render();
+
+          let html = '<p class="text-emerald-300 font-medium">✔ Selesai: ' + added + ' ditambahkan, ' + updated + ' diperbarui.</p>';
+          if (skipped) html += '<p class="text-slate-300">' + skipped + ' dilewati (kode sudah ada).</p>';
+          if (trimmed) html += '<p class="text-amber-300">' + trimmed + ' baris punya lebih dari ' + MAX_ARTISTS + ' artis; hanya ' + MAX_ARTISTS + ' pertama yang disimpan.</p>';
+          if (invalid.length) {
+            html += '<p class="text-rose-300">' + invalid.length + ' baris dilewati karena format tidak valid:</p><ul class="list-disc pl-5 text-rose-300/90 text-xs">' +
+              invalid.slice(0, 6).map((s) => '<li>' + escapeHTML(s) + '</li>').join('') +
+              (invalid.length > 6 ? '<li>…dan ' + (invalid.length - 6) + ' lainnya</li>' : '') + '</ul>';
+          }
+          showImportResult(html);
+          if (!invalid.length) importText.value = '';
+        } catch (err) {
+          showDbError(err, 'Impor gagal');
+          showImportResult('<p class="text-rose-300">✖ Impor gagal: ' + escapeHTML(errText(err)) + '</p>');
+        } finally {
+          runImportBtn.disabled = false;
+          runImportBtn.textContent = 'Impor';
+        }
+      }
+
+      function showImportResult(html) {
+        importResult.innerHTML = html;
+        importResult.classList.remove('hidden');
+      }
+
+      function openImport() {
+        importResult.classList.add('hidden');
+        importResult.innerHTML = '';
+        importModal.classList.remove('hidden');
+        document.body.classList.add('overflow-hidden');
+        setTimeout(() => importText.focus(), 50);
+      }
+      function closeImport() {
+        importModal.classList.add('hidden');
+        document.body.classList.remove('overflow-hidden');
+      }
+
+      $('openImport').addEventListener('click', openImport);
+      $('closeImport').addEventListener('click', closeImport);
+      $('cancelImport').addEventListener('click', closeImport);
+      $('importBackdrop').addEventListener('click', closeImport);
+      runImportBtn.addEventListener('click', runImport);
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !importModal.classList.contains('hidden')) closeImport();
+      });
+
+      /* =========================================================
+         MANAJEMEN BACKUP DATA (Ekspor / Pulihkan JSON)
+      ========================================================= */
+
+      // Ekspor: seluruh data film + daftar artis -> file backup_histori_film.json
+      async function exportData() {
+        try {
+          await fetchMovies();   // pastikan backup berisi data terbaru di Supabase
+        } catch (err) {
+          showDbError(err, 'Gagal mengambil data untuk backup');
+          return;
+        }
+        const payload = {
+          app: 'histori-film',
+          version: 1,
+          exportedAt: new Date().toISOString(),
+          movies: moviesCache,
+          artists: loadArtistList()
+        };
+        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'backup_histori_film.json';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+
+      // Validasi + normalisasi satu entri film dari file backup. Return null jika tidak valid.
+      function sanitizeBackupMovie(m) {
+        if (!m || typeof m !== 'object' || Array.isArray(m)) return null;
+        const code = normalizeCode(m.code);
+        if (!code) return null;
+
+        const validCats = CATEGORIES.map((c) => c.name);
+        const rawCats = Array.isArray(m.categories) ? m.categories : (m.category ? [m.category] : []);
+        const categories = rawCats.filter((c, i) => validCats.includes(c) && rawCats.indexOf(c) === i);
+
+        let rating = Math.round((Number(m.rating) || 0) * 2) / 2;
+        rating = Math.max(0, Math.min(5, rating));
+
+        const seen = new Set();
+        const artists = (Array.isArray(m.artists) ? m.artists : [])
+          .map(toTitleCase)
+          .filter((a) => {
+            if (!a) return false;
+            const k = a.toLowerCase();
+            if (seen.has(k)) return false;
+            seen.add(k);
+            return true;
+          })
+          .slice(0, MAX_ARTISTS);
+
+        return { code: code, categories: categories, rating: rating, hot: !!m.hot, artists: artists };
+      }
+
+      // Pulihkan: baca file JSON, validasi, lalu timpa isi tabel Supabase.
+      // Urutan aman: upsert data backup dulu, baru hapus baris yang tidak ada di backup.
+      function importData(event) {
+        const input = event.target;
+        const file = input.files && input.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+
+        reader.onload = async function () {
+          let data;
+          try {
+            data = JSON.parse(reader.result);
+          } catch (err) {
+            alert('Format file tidak valid!');
+            input.value = '';
+            return;
+          }
+
+          const formatOk = data && typeof data === 'object' && !Array.isArray(data) &&
+            Array.isArray(data.movies) && (data.artists === undefined || Array.isArray(data.artists));
+          if (!formatOk) {
+            alert('Format file tidak valid!');
+            input.value = '';
+            return;
+          }
+
+          const movieMap = new Map();
+          for (const raw of data.movies) {
+            const m = sanitizeBackupMovie(raw);
+            if (!m) {
+              alert('Format file tidak valid!');
+              input.value = '';
+              return;
+            }
+            movieMap.set(codeKey(m.code), m);
+          }
+          const movies = Array.from(movieMap.values());
+
+          try {
+            await fetchMovies();
+          } catch (err) {
+            showDbError(err, 'Gagal membaca data saat ini dari Supabase');
+            input.value = '';
+            return;
+          }
+
+          if (!confirm('Data saat ini (' + moviesCache.length + ' film) akan DITIMPA oleh isi backup (' + movies.length + ' film). Lanjutkan?')) {
+            input.value = '';
+            return;
+          }
+
+          try {
+            await upsertMovies(movies);
+            const keep = new Set(movies.map((m) => m.code));
+            const toDelete = moviesCache.filter((m) => !keep.has(m.code)).map((m) => m.code);
+            if (toDelete.length) await deleteMovies(toDelete);
+            hideDbError();
+          } catch (err) {
+            showDbError(err, 'Pemulihan data gagal');
+            input.value = '';
+            await render();
+            return;
+          }
+
+          input.value = '';          // agar file yang sama bisa dipilih lagi
+          resetForm();
+          await render();
+          alert('Data berhasil dipulihkan!');
+        };
+
+        reader.onerror = function () {
+          alert('Format file tidak valid!');
+          input.value = '';
+        };
+
+        reader.readAsText(file);
+      }
+
+      $('exportBtn').addEventListener('click', exportData);
+      $('restoreBtn').addEventListener('click', () => $('restoreFile').click());
+      $('restoreFile').addEventListener('change', importData);
+
+      /* =========================================================
+         MIGRASI DATA LAMA (localStorage -> Supabase)
+         Data lama tidak dihapus dari browser; hanya disalin ke Supabase.
+      ========================================================= */
+      function readLocalMovies() {
+        const map = new Map();
+        readLocalJSON(MOVIES_KEY).forEach((raw) => {
+          const m = sanitizeBackupMovie(raw);
+          if (m) map.set(codeKey(m.code), m);
+        });
+        return Array.from(map.values());
+      }
+
+      function checkLocalMigration() {
+        let migrated = false;
+        try { migrated = localStorage.getItem(MIGRATED_KEY) === '1'; } catch (e) {}
+        const local = migrated ? [] : readLocalMovies();
+        migrateCount.textContent = local.length;
+        migrateBanner.classList.toggle('hidden', local.length === 0);
+      }
+
+      migrateBtn.addEventListener('click', async () => {
+        const local = readLocalMovies();
+        if (!local.length) { checkLocalMigration(); return; }
+
+        migrateBtn.disabled = true;
+        migrateBtn.textContent = 'Mengunggah…';
+        try {
+          await fetchMovies();
+          const existing = new Set(moviesCache.map((m) => codeKey(m.code)));
+          const fresh = local.filter((m) => !existing.has(codeKey(m.code)));   // kode yang sudah ada di Supabase tidak ditimpa
+          if (fresh.length) await upsertMovies(fresh);
+          try { localStorage.setItem(MIGRATED_KEY, '1'); } catch (e) {}
+          hideDbError();
+          checkLocalMigration();
+          await render();
+          flashMessage(fresh.length + ' film lama berhasil diunggah.');
+        } catch (err) {
+          showDbError(err, 'Gagal mengunggah data lama');
+        } finally {
+          migrateBtn.disabled = false;
+          migrateBtn.textContent = 'Unggah ke Supabase';
+        }
+      });
+
+      /* =========================================================
+         INIT
+      ========================================================= */
+      renderCategoryInputs();
+      syncCategoryTicks();
+      renderTags();
+      updateRatingUI();
+      checkLocalMigration();
+
+      if (SUPABASE_KEY.indexOf('PASTE_') === 0) {
+        showDbError('SUPABASE_KEY belum diisi. Ganti PASTE_PUBLISHABLE_KEY_DI_SINI dengan publishable key proyekmu.', 'Konfigurasi belum lengkap');
+      }
+      render();
+    })();
+  </script>
+</body>
+</html>
